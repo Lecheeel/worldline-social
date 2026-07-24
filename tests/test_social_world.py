@@ -43,6 +43,39 @@ def make_simulation(world: SocialWorld, store: InMemoryStateStore, events: Memor
 
 
 class SocialWorldTests(unittest.TestCase):
+    def test_concurrency_does_not_change_social_state_or_events(self) -> None:
+        def run(concurrency):
+            world = SocialWorld(("alice", "bob"))
+            sink = MemoryEventSink()
+            simulation = Simulation(
+                config=SimulationConfig(
+                    "social-concurrency",
+                    max_concurrent_turns=concurrency,
+                    max_actions_per_turn=1,
+                ),
+                entities=(EntitySpec("alice", "alice"), EntitySpec("bob", "bob")),
+                controllers={
+                    "alice": ReplayController(
+                        {"alice": [ActionIntent("create_post", {"content": "Alice"})]}
+                    ),
+                    "bob": ReplayController(
+                        {"bob": [ActionIntent("create_post", {"content": "Bob"})]}
+                    ),
+                },
+                scheduler=AllEntitiesScheduler(),
+                world=world,
+                state_store=InMemoryStateStore(),
+                event_sink=sink,
+            )
+            asyncio.run(simulation.run())
+            return world.state, [
+                (event.event_type, event.payload) for event in sink.events
+            ]
+
+        sequential = run(1)
+        concurrent = run(2)
+        self.assertEqual(sequential, concurrent)
+
     def test_checkpoint_restore_matches_continuous_social_run(self) -> None:
         continuous_world = SocialWorld(("alice", "bob"))
         asyncio.run(make_simulation(continuous_world, InMemoryStateStore(), MemoryEventSink()).run())
