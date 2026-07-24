@@ -34,6 +34,19 @@ python -m unittest discover -s tests -v
 python -m compileall -q src tests examples
 ```
 
+Run the checked-in JSON experiment:
+
+```powershell
+worldline-social validate-population examples\population.json
+worldline-social run examples\experiment.json
+```
+
+The runner resolves paths relative to the experiment file, builds the
+population, controllers, distribution policy, scheduler, SQLite checkpoint
+store, and event sink, then prints a machine-readable run summary. Use
+`--resume` only when the configured database already contains a checkpoint for
+the same `simulation_id`.
+
 Optional memory integrations are kept outside the engine core:
 
 ```powershell

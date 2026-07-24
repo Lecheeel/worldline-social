@@ -17,6 +17,9 @@ dependencies = [
 vector = ["sqlite-vec>=0.1.9,<0.2"]
 embedding = ["sentence-transformers>=3.0,<4.0"]
 
+[project.scripts]
+worldline-social = "worldline_social.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/worldline_social"]
 

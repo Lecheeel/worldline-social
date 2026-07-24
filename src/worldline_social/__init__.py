@@ -2,6 +2,7 @@
 
 from .controllers import LLMToolController
 from .dynamics import DynamicState, RecoveryDynamics, TraitProfile
+from .experiment import ExperimentConfig
 from .population import PersonProfile, PopulationManifest, RelationshipSpec
 from .memory.memory import (
     HashEmbeddingProvider,
@@ -15,6 +16,7 @@ from .memory.memory import (
 __all__ = [
     "HashEmbeddingProvider",
     "DynamicState",
+    "ExperimentConfig",
     "LLMToolController",
     "MemoryContextBuilder",
     "MemoryMatch",

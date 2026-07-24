@@ -1,0 +1,40 @@
+{
+  "manifest_version": "1",
+  "source": "worldline-social-example",
+  "generation_metadata": {
+    "description": "Small deterministic example population"
+  },
+  "people": [
+    {
+      "external_id": "example-alice",
+      "handle": "alice",
+      "display_name": "Alice",
+      "bio": "Interested in local energy policy",
+      "private_traits": {
+        "openness": 0.8,
+        "agreeableness": 0.6
+      },
+      "initial_state": {
+        "mood": 0.1,
+        "anger": 0.0,
+        "stress": 0.1,
+        "fatigue": 0.0,
+        "threat": 0.0
+      }
+    },
+    {
+      "external_id": "example-bob",
+      "handle": "bob",
+      "display_name": "Bob",
+      "bio": "Follows public infrastructure discussions"
+    }
+  ],
+  "relationships": [
+    {
+      "source_external_id": "example-bob",
+      "target_external_id": "example-alice",
+      "relationship_type": "follow",
+      "strength": 0.7
+    }
+  ]
+}

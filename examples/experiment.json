@@ -1,0 +1,28 @@
+{
+  "config_version": "1",
+  "simulation_id": "worldline-social-example",
+  "population_manifest": "population.json",
+  "output_database": "../runs/example.sqlite",
+  "seed": 42,
+  "max_ticks": 1,
+  "max_actions_per_turn": 1,
+  "max_concurrent_turns": 2,
+  "checkpoint_every_ticks": 1,
+  "distribution_policy": "all",
+  "feed_limit": 100,
+  "scripted_actions": {
+    "example-alice": [
+      {
+        "action_type": "create_post",
+        "parameters": {
+          "content": "What evidence should guide local solar investment?"
+        }
+      }
+    ],
+    "example-bob": [
+      {
+        "action_type": "do_nothing"
+      }
+    ]
+  }
+}
