@@ -19,3 +19,6 @@ embedding = ["sentence-transformers>=3.0,<4.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/worldline_social"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
