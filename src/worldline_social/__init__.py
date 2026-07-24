@@ -1,6 +1,7 @@
 """Worldline Social domain extensions for the Worldline Engine."""
 
 from .controllers import LLMToolController
+from .population import PersonProfile, PopulationManifest, RelationshipSpec
 from .memory.memory import (
     HashEmbeddingProvider,
     MemoryContextBuilder,
@@ -15,6 +16,9 @@ __all__ = [
     "LLMToolController",
     "MemoryContextBuilder",
     "MemoryMatch",
+    "PersonProfile",
+    "PopulationManifest",
+    "RelationshipSpec",
     "SQLiteMemoryProvider",
     "SQLiteMemoryRecallRecorder",
     "SentenceTransformerEmbeddingProvider",

@@ -71,7 +71,9 @@ class SocialWorldTests(unittest.TestCase):
             event_sink=MemoryEventSink(),
         )
         asyncio.run(simulation.run())
-        self.assertEqual({"posts": {}, "comments": {}, "likes": []}, world.state)
+        self.assertEqual({}, world.state["posts"])
+        self.assertEqual({}, world.state["comments"])
+        self.assertEqual([], world.state["likes"])
 
 
 if __name__ == "__main__":

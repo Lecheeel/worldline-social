@@ -12,6 +12,12 @@ The initial implementation provides a deterministic `SocialWorld` with:
 - post likes;
 - checkpoint and restore through the engine;
 - rule and replay controller integration.
+- a versioned JSON `PopulationManifest` with deterministic internal person IDs;
+- a schema-versioned `SocialState` for checkpoint compatibility.
+
+Public `handle` values and internal `person_id` values are separate. State,
+events and relationships use `person_id`; the manifest preserves external ID
+mapping for imports and reports.
 
 Future modules will add population manifests, recommendation policies, social dynamics, memory, embeddings, and model providers.
 
