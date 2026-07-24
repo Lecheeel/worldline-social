@@ -9,7 +9,9 @@ description = "A clear, replayable social simulation built on Worldline Engine"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-dependencies = ["worldline-engine>=0.2,<0.3"]
+dependencies = [
+    "worldline-engine @ git+https://github.com/Lecheeel/worldline-engine.git@729357d",
+]
 
 [project.optional-dependencies]
 vector = ["sqlite-vec>=0.1.9,<0.2"]
