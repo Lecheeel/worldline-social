@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
 from typing import Any, Sequence
 
@@ -14,15 +15,29 @@ from worldline_engine.protocols import (
     CommitDecision,
 )
 
+from .distribution import AllPostsDistribution, DistributionPolicy
 from .population import PopulationManifest
 from .state import SocialState
 
 
 class SocialWorld:
-    """Posts, comments, feed reads, likes, and deterministic commit semantics."""
+    """Public conversation with replaceable distribution and stable state."""
 
     _actions = (
         ActionSpec("view_feed", ActionKind.READ, "Read the current public feed."),
+        ActionSpec(
+            "view_thread",
+            ActionKind.READ,
+            "Read a post and its comments.",
+            {"required": ("post_id",)},
+        ),
+        ActionSpec(
+            "search_square",
+            ActionKind.READ,
+            "Search public posts and comments.",
+            {"required": ("query",)},
+            cost=2,
+        ),
         ActionSpec(
             "create_post",
             ActionKind.WRITE,
@@ -36,19 +51,52 @@ class SocialWorld:
             {"required": ("post_id", "content")},
         ),
         ActionSpec(
+            "reply_comment",
+            ActionKind.WRITE,
+            "Reply to a comment.",
+            {"required": ("comment_id", "content")},
+        ),
+        ActionSpec(
             "like_post",
             ActionKind.WRITE,
             "Like a post.",
             {"required": ("post_id",)},
         ),
+        ActionSpec(
+            "unlike_post",
+            ActionKind.WRITE,
+            "Remove a post like.",
+            {"required": ("post_id",)},
+        ),
+        ActionSpec(
+            "like_comment",
+            ActionKind.WRITE,
+            "Like a comment.",
+            {"required": ("comment_id",)},
+        ),
+        ActionSpec(
+            "unlike_comment",
+            ActionKind.WRITE,
+            "Remove a comment like.",
+            {"required": ("comment_id",)},
+        ),
         ActionSpec("do_nothing", ActionKind.WRITE, "Record no social action.", cost=0),
     )
 
-    def __init__(self, people: Sequence[str]) -> None:
+    def __init__(
+        self,
+        people: Sequence[str],
+        distribution_policy: DistributionPolicy | None = None,
+        feed_limit: int = 100,
+    ) -> None:
         person_ids = tuple(sorted(set(people)))
         if len(person_ids) != len(tuple(people)):
             raise ValueError("person ids must be unique")
+        if feed_limit < 1:
+            raise ValueError("feed_limit must be positive")
         self.people = person_ids
+        self.distribution_policy = distribution_policy or AllPostsDistribution()
+        self.feed_limit = feed_limit
         self._state = SocialState(
             people={
                 person_id: {"person_id": person_id, "handle": person_id}
@@ -57,9 +105,14 @@ class SocialWorld:
         )
 
     @classmethod
-    def from_manifest(cls, manifest: PopulationManifest) -> "SocialWorld":
+    def from_manifest(
+        cls,
+        manifest: PopulationManifest,
+        distribution_policy: DistributionPolicy | None = None,
+        feed_limit: int = 100,
+    ) -> "SocialWorld":
         imported = manifest.import_population()
-        world = cls(tuple(imported.people))
+        world = cls(tuple(imported.people), distribution_policy, feed_limit)
         world._state.people = {
             person_id: {
                 "person_id": person_id,
@@ -110,16 +163,20 @@ class SocialWorld:
         snapshot: Any,
         local_overlay: Sequence[BoundAction],
     ) -> dict[str, Any]:
-        del local_overlay
-        posts = list(snapshot.get("posts", {}).values())
-        posts.sort(key=lambda post: post["post_id"])
-        person = snapshot.get("people", {}).get(entity_id, {})
+        visible = self._visible_state(snapshot, local_overlay)
+        person = visible.people.get(entity_id, {})
+        feed = self.distribution_policy.select(
+            entity_id,
+            visible.to_mapping(),
+            self.feed_limit,
+            _stable_seed(entity_id),
+        )
         return {
             "self": {
                 "handle": person.get("handle"),
                 "display_name": person.get("display_name", ""),
             },
-            "feed": deepcopy(posts),
+            "feed": deepcopy(list(feed)),
         }
 
     def execute_read(
@@ -128,18 +185,62 @@ class SocialWorld:
         snapshot: Any,
         local_overlay: Sequence[BoundAction],
     ) -> ActionResult:
-        if action.intent.action_type != "view_feed":
+        visible = self._visible_state(snapshot, local_overlay)
+        name = action.intent.action_type
+        params = action.intent.parameters
+        if name == "view_feed":
+            observation = self.observe(action.entity_id, snapshot, local_overlay)
             return ActionResult(
                 action.action_id,
-                ActionStatus.REJECTED,
-                error_code="read_not_supported",
+                ActionStatus.ACCEPTED,
+                data={"feed": observation["feed"]},
             )
-        observation = self.observe(action.entity_id, snapshot, local_overlay)
-        return ActionResult(
-            action.action_id,
-            ActionStatus.ACCEPTED,
-            data={"feed": observation["feed"]},
-        )
+        if name == "view_thread":
+            post_id = params.get("post_id")
+            post = visible.posts.get(post_id)
+            if post is None:
+                return _rejected(action, "post_not_found")
+            comments = sorted(
+                (
+                    comment
+                    for comment in visible.comments.values()
+                    if comment["post_id"] == post_id
+                ),
+                key=lambda comment: comment["comment_id"],
+            )
+            return ActionResult(
+                action.action_id,
+                ActionStatus.ACCEPTED,
+                data={"post": deepcopy(post), "comments": deepcopy(comments)},
+            )
+        if name == "search_square":
+            query = params.get("query")
+            if not _valid_query(query):
+                return _rejected(action, "invalid_query")
+            needle = query.casefold()
+            matches = [
+                {"result_type": "post", **deepcopy(post)}
+                for post in visible.posts.values()
+                if needle in post["content"].casefold()
+            ]
+            matches.extend(
+                {"result_type": "comment", **deepcopy(comment)}
+                for comment in visible.comments.values()
+                if needle in comment["content"].casefold()
+            )
+            matches.sort(
+                key=lambda item: (
+                    item["result_type"],
+                    item.get("post_id", ""),
+                    item.get("comment_id", ""),
+                )
+            )
+            return ActionResult(
+                action.action_id,
+                ActionStatus.ACCEPTED,
+                data={"query": query, "results": matches[:100]},
+            )
+        return _rejected(action, "read_not_supported")
 
     def validate_write(
         self,
@@ -147,35 +248,51 @@ class SocialWorld:
         snapshot: Any,
         local_overlay: Sequence[BoundAction],
     ) -> ActionResult:
-        del local_overlay
+        visible = self._visible_state(snapshot, local_overlay)
         name = action.intent.action_type
         params = action.intent.parameters
         if name == "do_nothing":
             return ActionResult(action.action_id, ActionStatus.ACCEPTED, cost=0)
         if name == "create_post" and _valid_content(params.get("content")):
-            return ActionResult(action.action_id, ActionStatus.ACCEPTED, cost=1)
+            local_ref = f"post-{action.action_id}"
+            return ActionResult(
+                action.action_id,
+                ActionStatus.ACCEPTED,
+                data={"post_id": local_ref},
+                local_ref=local_ref,
+            )
         if name == "create_comment":
-            if params.get("post_id") not in snapshot.get("posts", {}):
-                return ActionResult(
-                    action.action_id,
-                    ActionStatus.REJECTED,
-                    error_code="post_not_found",
-                )
+            if params.get("post_id") not in visible.posts:
+                return _rejected(action, "post_not_found")
             if _valid_content(params.get("content")):
-                return ActionResult(action.action_id, ActionStatus.ACCEPTED, cost=1)
-        if name == "like_post":
-            if params.get("post_id") not in snapshot.get("posts", {}):
+                local_ref = f"comment-{action.action_id}"
                 return ActionResult(
                     action.action_id,
-                    ActionStatus.REJECTED,
-                    error_code="post_not_found",
+                    ActionStatus.ACCEPTED,
+                    data={"comment_id": local_ref},
+                    local_ref=local_ref,
                 )
-            return ActionResult(action.action_id, ActionStatus.ACCEPTED, cost=1)
-        return ActionResult(
-            action.action_id,
-            ActionStatus.REJECTED,
-            error_code="invalid_social_action",
-        )
+        if name == "reply_comment":
+            parent = visible.comments.get(params.get("comment_id"))
+            if parent is None:
+                return _rejected(action, "comment_not_found")
+            if _valid_content(params.get("content")):
+                local_ref = f"comment-{action.action_id}"
+                return ActionResult(
+                    action.action_id,
+                    ActionStatus.ACCEPTED,
+                    data={"comment_id": local_ref, "post_id": parent["post_id"]},
+                    local_ref=local_ref,
+                )
+        if name in {"like_post", "unlike_post"}:
+            if params.get("post_id") not in visible.posts:
+                return _rejected(action, "post_not_found")
+            return ActionResult(action.action_id, ActionStatus.ACCEPTED)
+        if name in {"like_comment", "unlike_comment"}:
+            if params.get("comment_id") not in visible.comments:
+                return _rejected(action, "comment_not_found")
+            return ActionResult(action.action_id, ActionStatus.ACCEPTED)
+        return _rejected(action, "invalid_social_action")
 
     def resolve_and_apply(
         self,
@@ -185,42 +302,100 @@ class SocialWorld:
         next_state = SocialState.from_mapping(snapshot)
         decisions: list[CommitDecision] = []
         for action in actions:
-            name = action.intent.action_type
-            params = action.intent.parameters
-            if name == "create_post":
-                post_id = f"post-{action.action_id}"
-                next_state.posts[post_id] = {
-                    "post_id": post_id,
-                    "author_person_id": action.entity_id,
-                    "content": params["content"],
-                    "like_count": 0,
-                }
-            elif name == "create_comment":
-                comment_id = f"comment-{action.action_id}"
-                next_state.comments[comment_id] = {
-                    "comment_id": comment_id,
-                    "post_id": params["post_id"],
-                    "author_person_id": action.entity_id,
-                    "content": params["content"],
-                }
-            elif name == "like_post":
-                key = [action.entity_id, params["post_id"]]
-                if key not in next_state.likes:
-                    next_state.likes.append(key)
-                    next_state.posts[params["post_id"]]["like_count"] += 1
+            data = self._apply_action(next_state, action)
             decisions.append(
                 CommitDecision(
                     action,
                     ActionResult(
                         action.action_id,
                         ActionStatus.ACCEPTED,
-                        data={"action": name},
+                        data=data,
                     ),
                 )
             )
         self._state = next_state
         return tuple(decisions)
 
+    def _visible_state(
+        self,
+        snapshot: Any,
+        local_overlay: Sequence[BoundAction],
+    ) -> SocialState:
+        visible = SocialState.from_mapping(snapshot)
+        for action in local_overlay:
+            self._apply_action(visible, action)
+        return visible
+
+    @staticmethod
+    def _apply_action(state: SocialState, action: BoundAction) -> dict[str, Any]:
+        name = action.intent.action_type
+        params = action.intent.parameters
+        if name == "create_post":
+            post_id = f"post-{action.action_id}"
+            state.posts[post_id] = {
+                "post_id": post_id,
+                "author_person_id": action.entity_id,
+                "content": params["content"],
+                "created_tick": action.tick_id,
+                "like_count": 0,
+            }
+            return {"post_id": post_id}
+        if name in {"create_comment", "reply_comment"}:
+            comment_id = f"comment-{action.action_id}"
+            parent_comment_id = params.get("comment_id") if name == "reply_comment" else None
+            post_id = (
+                state.comments[parent_comment_id]["post_id"]
+                if parent_comment_id is not None
+                else params["post_id"]
+            )
+            state.comments[comment_id] = {
+                "comment_id": comment_id,
+                "post_id": post_id,
+                "parent_comment_id": parent_comment_id,
+                "author_person_id": action.entity_id,
+                "content": params["content"],
+                "created_tick": action.tick_id,
+                "like_count": 0,
+            }
+            return {"comment_id": comment_id, "post_id": post_id}
+        if name in {"like_post", "unlike_post"}:
+            key = [action.entity_id, params["post_id"]]
+            is_like = name == "like_post"
+            changed = _set_reaction(state.post_likes, key, is_like)
+            if changed:
+                state.posts[params["post_id"]]["like_count"] += 1 if is_like else -1
+            return {"post_id": params["post_id"], "liked": is_like}
+        if name in {"like_comment", "unlike_comment"}:
+            key = [action.entity_id, params["comment_id"]]
+            is_like = name == "like_comment"
+            changed = _set_reaction(state.comment_likes, key, is_like)
+            if changed:
+                state.comments[params["comment_id"]]["like_count"] += 1 if is_like else -1
+            return {"comment_id": params["comment_id"], "liked": is_like}
+        return {"action": name}
+
+
+def _set_reaction(collection: list[list[str]], key: list[str], enabled: bool) -> bool:
+    if enabled and key not in collection:
+        collection.append(key)
+        return True
+    if not enabled and key in collection:
+        collection.remove(key)
+        return True
+    return False
+
+
+def _rejected(action: BoundAction, error_code: str) -> ActionResult:
+    return ActionResult(action.action_id, ActionStatus.REJECTED, error_code=error_code)
+
 
 def _valid_content(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip()) and len(value) <= 10_000
+
+
+def _valid_query(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= 500
+
+
+def _stable_seed(value: str) -> int:
+    return int.from_bytes(hashlib.sha256(value.encode()).digest()[:8], "big")
