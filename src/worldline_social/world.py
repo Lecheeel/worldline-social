@@ -185,7 +185,7 @@ class SocialWorld:
                 "handle": person.get("handle"),
                 "display_name": person.get("display_name", ""),
             },
-            "feed": deepcopy(list(feed)),
+            "feed": [self._public_post(post, visible) for post in feed],
         }
 
     def execute_read(
@@ -220,7 +220,13 @@ class SocialWorld:
             return ActionResult(
                 action.action_id,
                 ActionStatus.ACCEPTED,
-                data={"post": deepcopy(post), "comments": deepcopy(comments)},
+                data={
+                    "post": self._public_post(post, visible),
+                    "comments": [
+                        self._public_comment(comment, visible)
+                        for comment in comments
+                    ],
+                },
             )
         if name == "search_square":
             query = params.get("query")
@@ -228,12 +234,15 @@ class SocialWorld:
                 return _rejected(action, "invalid_query")
             needle = query.casefold()
             matches = [
-                {"result_type": "post", **deepcopy(post)}
+                {"result_type": "post", **self._public_post(post, visible)}
                 for post in visible.posts.values()
                 if needle in post["content"].casefold()
             ]
             matches.extend(
-                {"result_type": "comment", **deepcopy(comment)}
+                {
+                    "result_type": "comment",
+                    **self._public_comment(comment, visible),
+                }
                 for comment in visible.comments.values()
                 if needle in comment["content"].casefold()
             )
@@ -348,6 +357,30 @@ class SocialWorld:
         for action in local_overlay:
             self._apply_action(visible, action)
         return visible
+
+    @staticmethod
+    def _public_post(post: Any, state: SocialState) -> dict[str, Any]:
+        author = state.people.get(post["author_person_id"], {})
+        return {
+            "post_id": post["post_id"],
+            "author_handle": author.get("handle", "unknown"),
+            "content": post["content"],
+            "created_tick": post.get("created_tick", 0),
+            "like_count": post.get("like_count", 0),
+        }
+
+    @staticmethod
+    def _public_comment(comment: Any, state: SocialState) -> dict[str, Any]:
+        author = state.people.get(comment["author_person_id"], {})
+        return {
+            "comment_id": comment["comment_id"],
+            "post_id": comment["post_id"],
+            "parent_comment_id": comment.get("parent_comment_id"),
+            "author_handle": author.get("handle", "unknown"),
+            "content": comment["content"],
+            "created_tick": comment.get("created_tick", 0),
+            "like_count": comment.get("like_count", 0),
+        }
 
     @staticmethod
     def _apply_action(state: SocialState, action: BoundAction) -> dict[str, Any]:

@@ -177,6 +177,8 @@ class SocialWorldTests(unittest.TestCase):
 
         reads = [event for event in sink.events if event.event_type == "action_read"]
         self.assertEqual("post", reads[0].payload["result"]["data"]["results"][0]["result_type"])
+        self.assertEqual("alice", reads[0].payload["result"]["data"]["results"][0]["author_handle"])
+        self.assertNotIn("author_person_id", reads[0].payload["result"]["data"]["results"][0])
         self.assertEqual(post_id, reads[1].payload["result"]["data"]["post"]["post_id"])
 
 
