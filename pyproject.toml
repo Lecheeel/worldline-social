@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "worldline-social"
+version = "0.1.0"
+description = "A clear, replayable social simulation built on Worldline Engine"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = ["worldline-engine>=0.2,<0.3"]
+
+[project.optional-dependencies]
+vector = ["sqlite-vec>=0.1.9,<0.2"]
+embedding = ["sentence-transformers>=3.0,<4.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/worldline_social"]
