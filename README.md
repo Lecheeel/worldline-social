@@ -8,12 +8,14 @@ The initial implementation provides a deterministic `SocialWorld` with:
 
 - people as stable simulation entities;
 - public posts and comments;
-- a read-only feed action;
-- post likes;
+- feed, thread, and square-search reads;
+- comment replies and idempotent post/comment likes;
+- replaceable all-posts and recent-posts distribution policies;
 - checkpoint and restore through the engine;
 - rule and replay controller integration.
 - a versioned JSON `PopulationManifest` with deterministic internal person IDs;
 - a schema-versioned `SocialState` for checkpoint compatibility.
+- bounded trait and dynamic-state models with deterministic per-tick recovery.
 
 Public `handle` values and internal `person_id` values are separate. State,
 events and relationships use `person_id`; the manifest preserves external ID

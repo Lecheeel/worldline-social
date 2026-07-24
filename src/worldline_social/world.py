@@ -16,6 +16,7 @@ from worldline_engine.protocols import (
 )
 
 from .distribution import AllPostsDistribution, DistributionPolicy
+from .dynamics import DynamicsPolicy, RecoveryDynamics
 from .population import PopulationManifest
 from .state import SocialState
 
@@ -87,6 +88,7 @@ class SocialWorld:
         self,
         people: Sequence[str],
         distribution_policy: DistributionPolicy | None = None,
+        dynamics_policy: DynamicsPolicy | None = None,
         feed_limit: int = 100,
     ) -> None:
         person_ids = tuple(sorted(set(people)))
@@ -96,6 +98,7 @@ class SocialWorld:
             raise ValueError("feed_limit must be positive")
         self.people = person_ids
         self.distribution_policy = distribution_policy or AllPostsDistribution()
+        self.dynamics_policy = dynamics_policy or RecoveryDynamics()
         self.feed_limit = feed_limit
         self._state = SocialState(
             people={
@@ -109,10 +112,16 @@ class SocialWorld:
         cls,
         manifest: PopulationManifest,
         distribution_policy: DistributionPolicy | None = None,
+        dynamics_policy: DynamicsPolicy | None = None,
         feed_limit: int = 100,
     ) -> "SocialWorld":
         imported = manifest.import_population()
-        world = cls(tuple(imported.people), distribution_policy, feed_limit)
+        world = cls(
+            tuple(imported.people),
+            distribution_policy,
+            dynamics_policy,
+            feed_limit,
+        )
         world._state.people = {
             person_id: {
                 "person_id": person_id,
@@ -315,6 +324,20 @@ class SocialWorld:
             )
         self._state = next_state
         return tuple(decisions)
+
+    def advance_tick(self, tick_id: int) -> None:
+        next_state = SocialState.from_mapping(self.state)
+        for person_id in sorted(next_state.people):
+            person = next_state.people[person_id]
+            person["dynamic_state"] = dict(
+                self.dynamics_policy.advance(
+                    person_id,
+                    person.get("private_traits", {}),
+                    person.get("dynamic_state", {}),
+                    tick_id,
+                )
+            )
+        self._state = next_state
 
     def _visible_state(
         self,
