@@ -1,109 +1,108 @@
-# Worldline Social
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/Event%20to%20simulation-automated-2ea44f" alt="Event to simulation">
+  <img src="https://img.shields.io/badge/Affective%20dynamics-personality%20driven-orange" alt="Affective dynamics">
+  <img src="https://img.shields.io/badge/Multi%20worldline-by%20design-8A2BE2" alt="Multi worldline">
+  <img src="https://img.shields.io/badge/PRs-welcome-important" alt="PRs welcome">
+  <img src="https://img.shields.io/badge/License-Apache--2.0-yellow" alt="Apache 2.0">
+</p>
 
-[![CI](https://github.com/Lecheeel/worldline-social/actions/workflows/ci.yml/badge.svg)](https://github.com/Lecheeel/worldline-social/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+<p align="center"><b>English</b> · <a href="README.zh-CN.md">中文</a></p>
 
-> **如果一群人拥有记忆、关系和选择，他们会把世界带向哪里？**
+<h1 align="center">🌍 Worldline Social</h1>
 
-Worldline Social 是一个可复现的社会仿真实验场。你可以定义一群人，让他们在同一个数字社会中发帖、评论、建立关系、接收信息，并观察情绪、观点和行为如何随着时间彼此影响。
+<p align="center"><b>From one real-world event to a thousand possible futures.</b></p>
 
-它不是一个静态的数据集，也不是一段只能运行一次的演示。每次实验都有明确的人口、规则、时间线和事件记录：你可以从同一个起点重新开始，替换一种分发策略，换一组 Agent，或者回到某个 checkpoint，看看世界会不会走向另一条路。
-
-## 这里可以探索什么
-
-- **观点如何扩散**：同一条信息，在不同的 feed 和关系网络中会走多远？
-- **关系如何改变行为**：关注、回应和互动会怎样影响一个人的下一步选择？
-- **情绪如何进入公共空间**：压力、愤怒、疲劳与恢复，如何改变表达和参与？
-- **Agent 如何形成连续性**：有记忆的角色，和只看当前信息的角色，会做出怎样不同的决定？
-- **规则如何塑造结果**：改变平台规则、人口构成或行动预算，世界会发生什么变化？
-
-## 一个小世界，也足够有趣
-
-```text
-导入人物 → 让他们行动 → 推进时间 → 保存世界
-    ↑                         ↓
-    └──────── 回放 / 比较 ────────┘
-```
-
-项目提供从人口清单到实验配置的完整入口，并支持规则控制、回放控制和可选的 LLM、记忆与向量扩展。你可以先从一个两三个人的小实验开始，再逐步增加关系、动态状态和更复杂的决策者。
-
-你也可以直接阅读 [示例人口](examples/population.json)、[实验配置](examples/experiment.json) 和 [最小运行脚本](examples/social_simulation.py)，从一个只有 Alice 和 Bob 的小世界开始。
-
-## 把好奇心变成实验
-
-从一个小问题开始：一条关于公共议题的帖子，会被谁看见？谁会回应？当一个人的情绪、关系和记忆都发生变化时，下一条选择还会一样吗？Worldline Social 让这些变化有迹可循，也让不同答案可以在同一个起点上被比较。
-
-## 快速开始
-
-需要 Python 3.11 或更高版本。开发时先安装 Engine，再安装 Social：
-
-```powershell
-python -m pip install -e ..\worldline-engine
-python -m pip install -e .
-worldline-social validate-population examples\population.json
-worldline-social run examples\experiment.json
-```
-
-实验完成后会输出摘要，并将 checkpoint 与事件写入配置指定的位置。使用 `--resume` 可以从已有 checkpoint 继续。
-
-首次运行会创建实验数据库；重复开始同一个实验前，请先移除 `runs\example.sqlite`，或使用 `--resume` 从已有 checkpoint 继续。
-
-## 项目关系
-
-Worldline Social 建立在 [Worldline Engine](https://github.com/Lecheeel/worldline-engine) 之上。Engine 提供稳定的时间线和执行语义，Social 在此基础上定义人物、社会动作、信息分发和动态状态。两者保持独立，方便把同一套运行内核用于其他类型的世界。
-
-## 项目状态
-
-这是一个持续构建中的研究型开源项目。当前重点是让社会实验可复现、可恢复、可比较，并为更丰富的人口、记忆和 Agent 行为留下清晰的扩展空间。
-
-## License
-
-Apache License 2.0，与 [Worldline Engine](https://github.com/Lecheeel/worldline-engine) 保持一致。详见 [LICENSE](LICENSE)。
+<p align="center">
+  Paste a real public-opinion event. Worldline Social extracts the actors who can
+  actually speak on social media, infers their <b>personalities, stances, interests and
+  memories</b>, spawns them into a deterministic digital society, and lets them argue,
+  post, like, and react — while their <b>moods shift with every interaction</b>.
+  Same event. Different seeds. A whole space of possible futures.
+</p>
 
 ---
 
-## Overview
+## ✨ Why Worldline Social?
 
-> **Give people memory, relationships, and choices. Then see where the world goes.**
+Public opinion is not one story — it is a distribution of plausible stories. Most
+simulators give you a single run and call it a prediction. Worldline Social gives you
+a **reproducible laboratory** for the space of what could happen:
 
-Worldline Social is a reproducible laboratory for social simulation. Populate a shared digital society, let agents post, reply, form relationships, receive information, and observe how behavior, mood, and opinions influence one another over time.
+- ⚡ **Event → simulation, fully automated** — `worldline-social generate-manifest event.txt population.json` extracts the actors (people, media, institutions, governments), generates personas with Big Five + dark-triad traits, stances, interests and event memories, and seeds the world with the event's spark as its first post.
+- 🧠 **Personality actually matters** — every agent's persona, stance, and live emotional state is rendered into its LLM context every turn. Neurotic people overreact; psychopathic profiles shrug off criticism; agreeable people light up at approval.
+- 💥 **Emotions are a causal system** — posting, being liked, disliked, or replied to shifts mood, anger, stress and threat, modulated by traits. Watch outrage build, fatigue accumulate, and opinions collide over ticks.
+- 🌌 **One event, many worldlines** — deterministic scheduling keeps each run byte-level replayable; every `--seed` is a different branch. Compare them. That is the data.
+- 🔁 **Pause, resume, replay** — checkpoints and event trails on SQLite make long experiments resumable and every moment re-examinable.
 
-This is more than a one-off demo or a static dataset. Every experiment has an explicit population, rule set, timeline, and event trail. Start from the same point, change the feed policy or the agents, resume from a checkpoint, and see whether the world takes a different path.
+> 🦋 **We do not predict the future. We rehearse many.** Run the same event with
+> different seeds, swap a rule, inject a variable — and see where the world goes.
 
-## Questions Worth Exploring
+## 🏗️ Pipeline
 
-- How far does an idea travel through different feeds and relationship networks?
-- How do follows, replies, and interactions change a person’s next decision?
-- How do stress, anger, fatigue, and recovery shape public expression?
-- What changes when agents remember the past instead of seeing only the present?
-- How much of an outcome comes from the people, and how much from the rules?
+```mermaid
+graph LR
+    A["📰 Real event<br/>(text / file)"] --> B["🔍 Extract actors<br/>(who can speak on social media)"]
+    B --> C["🎭 Generate personas<br/>(traits · stance · memory)"]
+    C --> D["📋 PopulationManifest<br/>(validated contract)"]
+    D --> E["🧑‍🤝‍🧑 LLM agents act<br/>(read → think → post / like / reply)"]
+    E --> F["💥 Affective dynamics<br/>(mood · anger · stress)"]
+    F --> G["🔎 Replay / compare<br/>(across seeds & variables)"]
+```
 
-## Quick Start
+Built on [Worldline Engine](https://github.com/Lecheeel/worldline-engine), which owns
+the deterministic timeline; Social owns the people, the platforms, the emotions and the
+experiments.
 
-Python 3.11 or newer is required. During development, install the Engine first:
+## 🚀 Quick Start
 
 ```powershell
+# install the engine first, then social
 python -m pip install -e ..\worldline-engine
 python -m pip install -e .
+
+# run the scripted example (no LLM required)
 worldline-social validate-population examples\population.json
 worldline-social run examples\experiment.json
 ```
 
-The example prints a summary and writes checkpoints and events to the configured location. Use `--resume` to continue from an existing checkpoint.
+### From a real event to a simulated society
 
-The first run creates the experiment database. To start the same experiment from scratch again, remove `runs\example.sqlite`; use `--resume` when you want to continue an existing run.
+```powershell
+# 1. generate a population from an event (requires DEEPSEEK_API_KEY)
+worldline-social generate-manifest event.txt population.json
 
-## Turn Curiosity Into an Experiment
+# 2. run an LLM-driven experiment (see examples/experiment_llm.json)
+worldline-social run experiment.json
+```
 
-Start with a small question: who sees a post about a public issue, who responds, and does the next choice change when mood, relationships, and memory change? Worldline Social keeps those changes traceable and makes alternative answers comparable from the same starting point.
+Or run the full loop in one command with [examples/event_to_simulation.py](examples/event_to_simulation.py):
 
-## Project Relationship
+```powershell
+python examples\event_to_simulation.py event.txt --ticks 5 --seed 0
+```
 
-Worldline Social is built on [Worldline Engine](https://github.com/Lecheeel/worldline-engine). Engine provides the timeline and execution semantics; Social defines people, social actions, information flow, and evolving state. The two projects remain independent so the same execution core can power many kinds of worlds.
+Each `--seed` is one worldline. Run it with seeds `0..N` and compare the futures.
 
-## Project Status
+## 🧪 What You Can Explore
 
-Worldline Social is an evolving research-oriented open-source project. Current work focuses on reproducible, resumable, and comparable social experiments, with room for richer populations, memory, and agent behavior.
+- **Outrage dynamics** — how does a single controversial post cascade into anger across a network?
+- **Echo chambers** — replace the feed policy and watch opinion clusters diverge.
+- **Personality × platform** — the same event, the same people, different traits: what breaks differently?
+- **Intervention experiments** — inject a variable at tick 3 on one worldline, keep the control, compare.
 
-## License
+## 🗺️ Roadmap
+
+- [ ] Local knowledge-graph memory (GraphRAG on SQLite, no cloud)
+- [ ] Dynamic memory: agents write what they experienced, recall it, act on it
+- [ ] Batch worldline exploration & divergence analytics
+- [ ] Probe any agent: ask the simulated world what it thinks
+
+## 🤝 Contributing
+
+PRs are welcome! Please follow [Conventional Commits](https://www.conventionalcommits.org/).
+Bugs, ideas and experiments → [Issues](https://github.com/Lecheeel/worldline-social/issues).
+
+## 📄 License
 
 Apache License 2.0, matching [Worldline Engine](https://github.com/Lecheeel/worldline-engine). See [LICENSE](LICENSE).
