@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 from worldline_engine import (
     AllEntitiesScheduler,
@@ -16,9 +17,13 @@ from worldline_engine import (
     Simulation,
 )
 
+from .controllers import LLMToolController
 from .distribution import AllPostsDistribution, RecentPostsDistribution
+from .dynamics import AffectiveDynamics, RecoveryDynamics
 from .experiment import ExperimentConfig
 from .population import PopulationManifest
+from .prompting import SocialPromptBuilder
+from .providers import DeepSeekProvider
 from .world import SocialWorld
 
 
@@ -45,18 +50,31 @@ def build_simulation(config: ExperimentConfig):
         if config.distribution_policy == "all"
         else RecentPostsDistribution()
     )
+    dynamics = (
+        AffectiveDynamics()
+        if config.dynamics_policy == "affective"
+        else RecoveryDynamics()
+    )
     world = SocialWorld.from_manifest(
         manifest,
         distribution_policy=distribution,
+        dynamics_policy=dynamics,
         feed_limit=config.feed_limit,
     )
+    provider = _create_llm_provider(config.llm) if config.llm is not None else None
     entities = []
     controllers = {}
     for external_id, person_id in sorted(imported.external_id_mapping.items()):
         controller_ref = f"controller:{person_id}"
         actions = tuple(config.scripted_actions.get(external_id, ()))
-        entities.append(EntitySpec(person_id, controller_ref, metadata={"external_id": external_id}))
-        controllers[controller_ref] = ReplayController({person_id: actions})
+        entities.append(
+            EntitySpec(person_id, controller_ref, metadata={"external_id": external_id})
+        )
+        if actions or provider is None:
+            # Scripted actors win; without an llm config everything is replay.
+            controllers[controller_ref] = ReplayController({person_id: actions})
+        else:
+            controllers[controller_ref] = _llm_controller(config, world, provider, person_id)
     scheduler = (
         AllEntitiesScheduler()
         if config.activation_probability == 1.0
@@ -74,6 +92,41 @@ def build_simulation(config: ExperimentConfig):
         event_sink=event_sink,
     )
     return simulation, world, state_store, event_sink
+
+
+def _create_llm_provider(llm_config: Mapping[str, Any]) -> DeepSeekProvider:
+    """Create a provider from config; the API key always comes from the
+    environment, never from the experiment file."""
+    provider_id = str(llm_config["provider"]).strip()
+    if provider_id != "deepseek":
+        raise ValueError(f"unsupported llm provider: {provider_id}")
+    env_var = str(llm_config.get("api_key_env", "DEEPSEEK_API_KEY"))
+    api_key = os.environ.get(env_var, "")
+    if not api_key:
+        raise ValueError(f"{env_var} is not set; required for llm provider 'deepseek'")
+    return DeepSeekProvider(api_key)
+
+
+def _llm_controller(
+    config: ExperimentConfig,
+    world: SocialWorld,
+    provider: DeepSeekProvider,
+    person_id: str,
+) -> LLMToolController:
+    """Assemble an LLM controller whose prompt carries the live persona.
+
+    A per-person ``model_policy.model`` overrides the experiment-wide model.
+    """
+    assert config.llm is not None
+    person = world.state["people"][person_id]
+    model = str(person.get("model_policy", {}).get("model") or config.llm["model"])
+    return LLMToolController(
+        provider,
+        model,
+        prompt_builder=SocialPromptBuilder(world),
+        temperature=config.llm.get("temperature"),
+        max_tokens=config.llm.get("max_tokens"),
+    )
 
 
 async def run_experiment(config: ExperimentConfig, resume: bool = False) -> ExperimentResult:

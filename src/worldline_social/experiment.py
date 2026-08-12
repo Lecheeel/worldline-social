@@ -26,8 +26,10 @@ class ExperimentConfig:
     turn_timeout_seconds: float | None = None
     checkpoint_every_ticks: int = 1
     distribution_policy: str = "all"
+    dynamics_policy: str = "affective"
     feed_limit: int = 100
     scripted_actions: Mapping[str, Sequence[ActionIntent]] = field(default_factory=dict)
+    llm: Mapping[str, Any] | None = None
 
     @classmethod
     def from_json(cls, path: str | Path) -> "ExperimentConfig":
@@ -65,8 +67,10 @@ class ExperimentConfig:
             turn_timeout_seconds=value.get("turn_timeout_seconds"),
             checkpoint_every_ticks=int(value.get("checkpoint_every_ticks", 1)),
             distribution_policy=str(value.get("distribution_policy", "all")),
+            dynamics_policy=str(value.get("dynamics_policy", "affective")),
             feed_limit=int(value.get("feed_limit", 100)),
             scripted_actions=scripted_actions,
+            llm=dict(value["llm"]) if value.get("llm") is not None else None,
         )
         config.validate()
         return config
@@ -84,8 +88,17 @@ class ExperimentConfig:
             raise ValueError("activation_probability must be in [0, 1]")
         if self.distribution_policy not in {"all", "recent"}:
             raise ValueError("distribution_policy must be 'all' or 'recent'")
+        if self.dynamics_policy not in {"recovery", "affective"}:
+            raise ValueError("dynamics_policy must be 'recovery' or 'affective'")
         if self.feed_limit < 1:
             raise ValueError("feed_limit must be positive")
+        if self.llm is not None:
+            provider = str(self.llm.get("provider", "")).strip()
+            model = str(self.llm.get("model", "")).strip()
+            if not provider or not model:
+                raise ValueError("llm requires both 'provider' and 'model'")
+            if provider not in {"deepseek"}:
+                raise ValueError(f"unsupported llm provider: {provider}")
 
     def engine_config(self) -> SimulationConfig:
         return SimulationConfig(

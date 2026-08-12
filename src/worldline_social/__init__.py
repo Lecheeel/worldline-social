@@ -1,9 +1,15 @@
 """Worldline Social domain extensions for the Worldline Engine."""
 
 from .controllers import LLMToolController
-from .dynamics import DynamicState, RecoveryDynamics, TraitProfile
+from .dynamics import (
+    AffectiveDynamics,
+    DynamicState,
+    RecoveryDynamics,
+    TraitProfile,
+)
 from .experiment import ExperimentConfig
 from .population import PersonProfile, PopulationManifest, RelationshipSpec
+from .prompting import SocialPromptBuilder
 from .memory.memory import (
     HashEmbeddingProvider,
     MemoryContextBuilder,
@@ -14,6 +20,7 @@ from .memory.memory import (
 )
 
 __all__ = [
+    "AffectiveDynamics",
     "HashEmbeddingProvider",
     "DynamicState",
     "ExperimentConfig",
@@ -24,6 +31,7 @@ __all__ = [
     "PopulationManifest",
     "RelationshipSpec",
     "RecoveryDynamics",
+    "SocialPromptBuilder",
     "SQLiteMemoryProvider",
     "SQLiteMemoryRecallRecorder",
     "SentenceTransformerEmbeddingProvider",

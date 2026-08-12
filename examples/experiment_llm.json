@@ -1,0 +1,21 @@
+{
+  "config_version": "1",
+  "simulation_id": "worldline-social-llm-example",
+  "population_manifest": "population.json",
+  "output_database": "../runs/example-llm.sqlite",
+  "seed": 42,
+  "max_ticks": 3,
+  "max_actions_per_turn": 4,
+  "max_concurrent_turns": 1,
+  "checkpoint_every_ticks": 1,
+  "distribution_policy": "all",
+  "dynamics_policy": "affective",
+  "feed_limit": 100,
+  "llm": {
+    "provider": "deepseek",
+    "model": "deepseek-chat",
+    "temperature": 0.2,
+    "max_tokens": 512,
+    "api_key_env": "DEEPSEEK_API_KEY"
+  }
+}
