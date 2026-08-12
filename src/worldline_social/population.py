@@ -69,6 +69,38 @@ class PopulationManifest:
             raise ValueError("population manifest must be a JSON object")
         return cls.from_mapping(value)
 
+    def to_mapping(self) -> dict[str, Any]:
+        """Serialize back to the JSON contract consumed by ``from_mapping``."""
+        return {
+            "manifest_version": self.manifest_version,
+            "source": self.source,
+            "people": [
+                {
+                    "external_id": person.external_id,
+                    "handle": person.handle,
+                    "display_name": person.display_name,
+                    "bio": person.bio,
+                    "private_traits": dict(person.private_traits),
+                    "initial_state": dict(person.initial_state),
+                    "controller_ref": person.controller_ref,
+                    "model_policy": dict(person.model_policy),
+                }
+                for person in self.people
+            ],
+            "relationships": [
+                {
+                    "source_external_id": item.source_external_id,
+                    "target_external_id": item.target_external_id,
+                    "relationship_type": item.relationship_type,
+                    "strength": item.strength,
+                }
+                for item in self.relationships
+            ],
+            "generation_metadata": dict(self.generation_metadata),
+            "groups": [dict(group) for group in self.groups],
+            "initial_content": [dict(item) for item in self.initial_content],
+        }
+
     def validate(self) -> None:
         if self.manifest_version != "1":
             raise ValueError("unsupported manifest_version")
