@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from copy import deepcopy
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from worldline_engine.protocols import (
     ActionKind,
@@ -17,6 +17,7 @@ from worldline_engine.protocols import (
 
 from .distribution import AllPostsDistribution, DistributionPolicy
 from .dynamics import DynamicsPolicy, RecoveryDynamics
+from .feedback import collect_action_feedback
 from .population import PopulationManifest
 from .state import SocialState
 
@@ -102,7 +103,18 @@ class SocialWorld:
         self.feed_limit = feed_limit
         self._state = SocialState(
             people={
-                person_id: {"person_id": person_id, "handle": person_id}
+                person_id: {
+                    "person_id": person_id,
+                    "handle": person_id,
+                    "private_traits": {},
+                    "dynamic_state": {
+                        "mood": 0.0,
+                        "anger": 0.0,
+                        "stress": 0.0,
+                        "fatigue": 0.0,
+                        "threat": 0.0,
+                    },
+                }
                 for person_id in person_ids
             }
         )
@@ -145,6 +157,7 @@ class SocialWorld:
             }
             for item in imported.relationships
         ]
+        _import_initial_content(world._state, manifest, imported.external_id_mapping)
         return world
 
     @property
@@ -319,8 +332,10 @@ class SocialWorld:
     ) -> Sequence[CommitDecision]:
         next_state = SocialState.from_mapping(snapshot)
         decisions: list[CommitDecision] = []
+        feedback_by_person: dict[str, list[dict[str, Any]]] = {}
         for action in actions:
             data = self._apply_action(next_state, action)
+            collect_action_feedback(next_state, action, feedback_by_person)
             decisions.append(
                 CommitDecision(
                     action,
@@ -331,6 +346,7 @@ class SocialWorld:
                     ),
                 )
             )
+        self._apply_feedback(next_state, feedback_by_person)
         self._state = next_state
         return tuple(decisions)
 
@@ -347,6 +363,22 @@ class SocialWorld:
                 )
             )
         self._state = next_state
+
+    def _apply_feedback(
+        self, state: SocialState, feedback_by_person: Mapping[str, list[dict[str, Any]]]
+    ) -> None:
+        for person_id, feedback in feedback_by_person.items():
+            person = state.people.get(person_id)
+            if person is None:
+                continue
+            person["dynamic_state"] = dict(
+                self.dynamics_policy.apply_feedback(
+                    person_id,
+                    person.get("private_traits", {}),
+                    person.get("dynamic_state", {}),
+                    tuple(feedback),
+                )
+            )
 
     def _visible_state(
         self,
@@ -429,6 +461,32 @@ class SocialWorld:
                 state.comments[params["comment_id"]]["like_count"] += 1 if is_like else -1
             return {"comment_id": params["comment_id"], "liked": is_like}
         return {"action": name}
+
+
+def _import_initial_content(
+    state: SocialState,
+    manifest: PopulationManifest,
+    external_id_mapping: Mapping[str, str],
+) -> None:
+    """Seed tick-0 posts so an event is already live when the world starts.
+
+    Post ids use a reserved ``post-import-`` prefix to avoid collisions with
+    action-derived ids.
+    """
+    for index, item in enumerate(manifest.initial_content):
+        author_external = item.get("external_id") if isinstance(item, dict) else None
+        content = item.get("content") if isinstance(item, dict) else None
+        author_id = external_id_mapping.get(author_external or "")
+        if author_id is None or not _valid_content(content):
+            continue
+        post_id = f"post-import-{index}"
+        state.posts[post_id] = {
+            "post_id": post_id,
+            "author_person_id": author_id,
+            "content": content,
+            "created_tick": int(item.get("created_tick", 0)),
+            "like_count": 0,
+        }
 
 
 def _set_reaction(collection: list[list[str]], key: list[str], enabled: bool) -> bool:
