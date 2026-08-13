@@ -10,6 +10,7 @@ from .dynamics import (
 from .experiment import ExperimentConfig
 from .population import PersonProfile, PopulationManifest, RelationshipSpec
 from .prompting import SocialPromptBuilder
+from .stats import SQLiteUsageStore, UsageRecord
 from .memory.memory import (
     HashEmbeddingProvider,
     MemoryContextBuilder,
@@ -34,6 +35,8 @@ __all__ = [
     "SocialPromptBuilder",
     "SQLiteMemoryProvider",
     "SQLiteMemoryRecallRecorder",
+    "SQLiteUsageStore",
     "SentenceTransformerEmbeddingProvider",
     "TraitProfile",
+    "UsageRecord",
 ]

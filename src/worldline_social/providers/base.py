@@ -22,6 +22,21 @@ class ModelToolCall:
 
 
 @dataclass(frozen=True)
+class BalanceInfo:
+    """Account balance snapshot from a provider's balance endpoint.
+
+    Monetary fields stay strings because providers (e.g. DeepSeek) return
+    formatted amounts with variable precision.
+    """
+
+    is_available: bool
+    currency: str = "CNY"
+    total_balance: str = "0.00"
+    granted_balance: str = "0.00"
+    topped_up_balance: str = "0.00"
+
+
+@dataclass(frozen=True)
 class CompletionRequest:
     model: str
     messages: Sequence[ModelMessage]

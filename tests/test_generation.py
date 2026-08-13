@@ -183,15 +183,17 @@ class ProfileGeneratorTests(unittest.TestCase):
 class PipelineTests(unittest.TestCase):
     def test_full_pipeline_builds_validated_manifest(self) -> None:
         provider = ScriptedProvider(
-            CompletionResponse(EXTRACTION_JSON),
-            CompletionResponse(PROFILE_JSON),
+            CompletionResponse(EXTRACTION_JSON, usage={"prompt_tokens": 100, "completion_tokens": 40, "prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 100}),
+            CompletionResponse(PROFILE_JSON, usage={"prompt_tokens": 50, "completion_tokens": 20, "prompt_cache_hit_tokens": 50, "prompt_cache_miss_tokens": 0}),
             CompletionResponse(
                 '{"display_name": "大学", "bio": "官方账号。", "traits": {},'
-                ' "stance": "neutral", "interested_topics": []}'
+                ' "stance": "neutral", "interested_topics": []}',
+                usage={"prompt_tokens": 30, "completion_tokens": 10},
             ),
             CompletionResponse(
                 '{"display_name": "媒体", "bio": "媒体账号。", "traits": {},'
-                ' "stance": "observer", "interested_topics": []}'
+                ' "stance": "observer", "interested_topics": []}',
+                usage={"prompt_tokens": 20, "completion_tokens": 5},
             ),
         )
 
@@ -209,6 +211,13 @@ class PipelineTests(unittest.TestCase):
         )
         self.assertEqual("worldline-social.generation.pipeline",
                          manifest.generation_metadata["generator"])
+        # usage totals across extraction + all profile calls
+        usage = manifest.generation_metadata["usage"]
+        self.assertEqual(200, usage["prompt_tokens"])
+        self.assertEqual(75, usage["completion_tokens"])
+        self.assertEqual(50, usage["prompt_cache_hit_tokens"])
+        self.assertEqual(100, usage["prompt_cache_miss_tokens"])
+        self.assertEqual(usage, result.diagnostics["usage"])
         # handles unique and valid
         handles = [person.handle for person in manifest.people]
         self.assertEqual(len(handles), len(set(handles)))

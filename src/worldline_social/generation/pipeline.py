@@ -14,6 +14,7 @@ from typing import Any, Mapping
 
 from ..population import PopulationManifest, RelationshipSpec
 from ..providers.base import ModelProvider
+from ..stats import UsageRecord, aggregate_usage
 from .extract import EventExtractor, Participant, Relationship
 from .profiles import ProfileGenerator
 
@@ -42,6 +43,7 @@ async def generate_population_from_text(
     profile_temperature: float | None = 0.4,
     max_attempts: int = 3,
     thinking: str | None = None,
+    usage_recorder: UsageRecorder | None = None,
 ) -> GenerationResult:
     """Extract actors, build profiles and return a validated manifest.
 
@@ -55,11 +57,18 @@ async def generate_population_from_text(
     if max_participants < 1:
         raise ValueError("max_participants must be positive")
 
-    extractor = EventExtractor(provider, model, extraction_temperature, max_attempts, thinking)
+    usage_records: list[UsageRecord] = []
+
+    def _record(record: UsageRecord) -> None:
+        usage_records.append(record)
+        if usage_recorder is not None:
+            usage_recorder(record)
+
+    extractor = EventExtractor(provider, model, extraction_temperature, max_attempts, thinking, usage_recorder=_record)
     extraction = await extractor.extract(text)
     participants = tuple(extraction.participants[:max_participants])
 
-    profile_generator = ProfileGenerator(provider, model, profile_temperature, max_attempts, thinking)
+    profile_generator = ProfileGenerator(provider, model, profile_temperature, max_attempts, thinking, usage_recorder=_record)
     people: list[PersonProfile] = []
     name_to_external: dict[str, str] = {}
     for index, participant in enumerate(participants):
@@ -67,6 +76,8 @@ async def generate_population_from_text(
         name_to_external[participant.name] = external_id
         profile = await profile_generator.generate(participant, external_id, text)
         people.append(profile)
+
+    usage_totals = aggregate_usage(usage_records)
 
     relationships = tuple(
         RelationshipSpec(
@@ -101,6 +112,7 @@ async def generate_population_from_text(
             "participant_count": len(people),
             "relationship_count": len(relationships),
             "extraction_diagnostics": dict(extraction.diagnostics),
+            "usage": usage_totals,
         },
         initial_content=tuple(initial_content),
     )
@@ -115,6 +127,7 @@ async def generate_population_from_text(
             "relationships_kept": len(relationships),
             "initial_content": len(initial_content),
             "extraction": dict(extraction.diagnostics),
+            "usage": usage_totals,
         },
     )
 

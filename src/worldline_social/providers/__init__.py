@@ -1,6 +1,7 @@
 """Model-provider adapters used by social controllers."""
 
 from .base import (
+    BalanceInfo,
     CompletionRequest,
     CompletionResponse,
     ModelMessage,
@@ -17,7 +18,9 @@ def builtin_provider_registry() -> ProviderRegistry:
     registry.register("deepseek", create_deepseek_provider)
     return registry
 
+
 __all__ = [
+    "BalanceInfo",
     "CompletionRequest",
     "CompletionResponse",
     "DeepSeekProvider",

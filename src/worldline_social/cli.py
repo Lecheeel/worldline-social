@@ -13,6 +13,7 @@ from .generation import generate_population_from_text_sync, result_to_json
 from .population import PopulationManifest
 from .providers import DeepSeekProvider
 from .runner import run_experiment_sync
+from .task.cli import add_task_parser, handle_task_command
 
 
 def main() -> None:
@@ -34,8 +35,12 @@ def main() -> None:
     generate.add_argument("--max-participants", type=int, default=30)
     generate.add_argument("--thinking", choices=("enabled", "disabled"), default="disabled",
                           help="LLM thinking mode (default: disabled)")
+    add_task_parser(commands)
     args = parser.parse_args()
 
+    if args.command == "task":
+        handle_task_command(args)
+        return
     if args.command == "validate-population":
         manifest = PopulationManifest.from_json(args.manifest)
         imported = manifest.import_population()
@@ -66,6 +71,7 @@ def main() -> None:
                     "population_size": len(result.manifest.people),
                     "relationships": len(result.manifest.relationships),
                     "initial_content": len(result.manifest.initial_content),
+                    "usage": result.diagnostics.get("usage", {}),
                 },
                 sort_keys=True,
             )

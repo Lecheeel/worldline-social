@@ -12,6 +12,7 @@ from worldline_engine import ActionIntent, FinishTurn
 from worldline_engine.protocols import Controller, TurnContext
 
 from .providers.base import CompletionRequest, ModelMessage, ModelProvider
+from .stats import UsageRecord, UsageRecorder
 
 PromptBuilder = Callable[[TurnContext], Sequence[ModelMessage] | Awaitable[Sequence[ModelMessage]]]
 
@@ -19,7 +20,7 @@ PromptBuilder = Callable[[TurnContext], Sequence[ModelMessage] | Awaitable[Seque
 class LLMToolController(Controller):
     """Translate normalized provider tool calls into engine intents."""
 
-    def __init__(self, provider: ModelProvider, model: str, prompt_builder: PromptBuilder | None = None, temperature: float | None = 0.0, max_tokens: int | None = 512, thinking: str | None = None) -> None:
+    def __init__(self, provider: ModelProvider, model: str, prompt_builder: PromptBuilder | None = None, temperature: float | None = 0.0, max_tokens: int | None = 512, thinking: str | None = None, usage_recorder: UsageRecorder | None = None) -> None:
         if not model:
             raise ValueError("model must not be empty")
         self._provider = provider
@@ -28,6 +29,7 @@ class LLMToolController(Controller):
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._thinking = thinking
+        self._usage_recorder = usage_recorder
         self._request_count = 0
         self._usage: dict[str, int] = defaultdict(int)
 
@@ -43,6 +45,17 @@ class LLMToolController(Controller):
         self._request_count += 1
         for metric, value in response.usage.items():
             self._usage[metric] += value
+        if self._usage_recorder is not None:
+            self._usage_recorder(
+                UsageRecord(
+                    simulation_id=context.simulation_id,
+                    tick_id=context.tick_id,
+                    entity_id=context.entity_id,
+                    model=self._model,
+                    provider_request_id=response.provider_request_id,
+                    usage=dict(response.usage),
+                )
+            )
         if not response.tool_calls:
             return FinishTurn("model_finished_without_tool_call")
         call = response.tool_calls[0]

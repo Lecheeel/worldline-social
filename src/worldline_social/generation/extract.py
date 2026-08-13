@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from ..providers.base import CompletionRequest, ModelMessage, ModelProvider
+from ..stats import UsageRecord, UsageRecorder
 from .json_utils import extract_json_object
 from .prompts import (
     EVENT_EXTRACTION_SYSTEM_PROMPT,
@@ -100,6 +101,7 @@ class EventExtractor:
         temperature: float | None = 0.2,
         max_attempts: int = 3,
         thinking: str | None = None,
+        usage_recorder: UsageRecorder | None = None,
     ) -> None:
         if max_attempts < 1:
             raise ValueError("max_attempts must be positive")
@@ -108,6 +110,7 @@ class EventExtractor:
         self._temperature = temperature
         self._max_attempts = max_attempts
         self._thinking = thinking
+        self._usage_recorder = usage_recorder
 
     async def extract(self, text: str) -> ExtractionResult:
         if not text.strip():
@@ -132,6 +135,7 @@ class EventExtractor:
                     thinking=self._thinking,
                 )
             )
+            self._record(response, entity_id="extractor")
             parsed = extract_json_object(response.content)
             if parsed is not None:
                 result = self._parse(parsed)
@@ -146,6 +150,20 @@ class EventExtractor:
         payload["attempts_used"] = self._max_attempts
         payload["raw_parseable"] = False
         return ExtractionResult(diagnostics=payload)
+
+    def _record(self, response: Any, entity_id: str) -> None:
+        if self._usage_recorder is not None and getattr(response, "usage", None):
+            self._usage_recorder(
+                UsageRecord(
+                    simulation_id="",
+                    tick_id=-1,
+                    entity_id=entity_id,
+                    model=self._model,
+                    phase="generation",
+                    provider_request_id=response.provider_request_id,
+                    usage=dict(response.usage),
+                )
+            )
 
     @staticmethod
     def _parse(parsed: Mapping[str, Any]) -> tuple[tuple[Participant, ...], tuple[Relationship, ...]]:

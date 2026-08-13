@@ -11,6 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .base import (
+    BalanceInfo,
     CompletionRequest,
     CompletionResponse,
     ModelProvider,
@@ -43,14 +44,59 @@ class DeepSeekProvider(ModelProvider):
         self._timeout_seconds = timeout_seconds
 
     @classmethod
-    def from_environment(cls) -> "DeepSeekProvider":
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
+    def from_environment(cls, env_var: str = "DEEPSEEK_API_KEY") -> "DeepSeekProvider":
+        api_key = os.environ.get(env_var)
         if api_key is None:
-            raise ProviderError("DEEPSEEK_API_KEY is not set")
+            raise ProviderError(f"{env_var} is not set")
         return cls(api_key=api_key)
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         return await asyncio.to_thread(self._complete_sync, request)
+
+    async def get_balance(self) -> BalanceInfo:
+        """Query the account balance (https://api.deepseek.com/user/balance)."""
+        return await asyncio.to_thread(self._balance_sync)
+
+    def _balance_sync(self) -> BalanceInfo:
+        http_request = Request(
+            f"{self._base_url}/user/balance",
+            method="GET",
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Accept": "application/json",
+            },
+        )
+        try:
+            with urlopen(http_request, timeout=self._timeout_seconds) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as error:
+            raise ProviderError(
+                f"DeepSeek balance request failed with HTTP {error.code}"
+            ) from error
+        except URLError as error:
+            raise ProviderError(
+                f"DeepSeek balance network request failed: {error.reason}"
+            ) from error
+        except TimeoutError as error:
+            raise ProviderError("DeepSeek balance request timed out") from error
+
+        is_available = bool(response_payload.get("is_available", False))
+        infos = response_payload.get("balance_infos") or ()
+        if not isinstance(infos, list) or not infos or not isinstance(infos[0], dict):
+            return BalanceInfo(is_available=is_available)
+        info = infos[0]
+
+        def _field(name: str) -> str:
+            value = info.get(name)
+            return str(value) if value is not None else "0.00"
+
+        return BalanceInfo(
+            is_available=is_available,
+            currency=str(info.get("currency", "CNY")),
+            total_balance=_field("total_balance"),
+            granted_balance=_field("granted_balance"),
+            topped_up_balance=_field("topped_up_balance"),
+        )
 
     def _complete_sync(self, request: CompletionRequest) -> CompletionResponse:
         payload: dict[str, Any] = {

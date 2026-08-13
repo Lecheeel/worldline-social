@@ -100,6 +100,42 @@ class ProviderTests(unittest.TestCase):
 
         self.assertEqual("disabled", provider.requests[0].thinking)
 
+    def test_llm_controller_records_per_request_usage(self) -> None:
+        records = []
+        provider = FakeProvider(
+            CompletionResponse(
+                content=None,
+                tool_calls=(ModelToolCall("call-1", "claim", {}),),
+                provider_request_id="req-abc",
+                usage={
+                    "prompt_tokens": 12,
+                    "completion_tokens": 3,
+                    "prompt_cache_hit_tokens": 8,
+                    "prompt_cache_miss_tokens": 4,
+                },
+            )
+        )
+        controller = LLMToolController(
+            provider, "fake-model", usage_recorder=records.append
+        )
+
+        asyncio.run(controller.next_action(context()))
+
+        self.assertEqual(1, len(records))
+        record = records[0]
+        self.assertEqual("test", record.simulation_id)
+        self.assertEqual(0, record.tick_id)
+        self.assertEqual("alice", record.entity_id)
+        self.assertEqual("fake-model", record.model)
+        self.assertEqual("req-abc", record.provider_request_id)
+        self.assertEqual(8, record.usage["prompt_cache_hit_tokens"])
+
+    def test_llm_controller_recorder_is_optional(self) -> None:
+        provider = FakeProvider(CompletionResponse("No action."))
+        controller = LLMToolController(provider, "fake-model")
+        decision = asyncio.run(controller.next_action(context()))
+        self.assertIsInstance(decision, FinishTurn)
+
     def test_builtin_registry_creates_deepseek_provider_without_exposing_key(self) -> None:
         registry = builtin_provider_registry()
         provider = registry.create("deepseek", {"api_key": "test-key"})

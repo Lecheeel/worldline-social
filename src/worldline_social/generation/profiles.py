@@ -9,6 +9,7 @@ from typing import Any, Mapping
 
 from ..population import PersonProfile
 from ..providers.base import CompletionRequest, ModelMessage, ModelProvider
+from ..stats import UsageRecord, UsageRecorder
 from .extract import Participant
 from .json_utils import extract_json_object
 from .prompts import PROFILE_SYSTEM_PROMPT, PROFILE_USER_TEMPLATE
@@ -47,6 +48,7 @@ class ProfileGenerator:
         temperature: float | None = 0.4,
         max_attempts: int = 3,
         thinking: str | None = None,
+        usage_recorder: UsageRecorder | None = None,
     ) -> None:
         if max_attempts < 1:
             raise ValueError("max_attempts must be positive")
@@ -55,6 +57,7 @@ class ProfileGenerator:
         self._temperature = temperature
         self._max_attempts = max_attempts
         self._thinking = thinking
+        self._usage_recorder = usage_recorder
 
     async def generate(
         self,
@@ -87,6 +90,18 @@ class ProfileGenerator:
                 )
             )
             parsed = extract_json_object(response.content)
+            if self._usage_recorder is not None and response.usage:
+                self._usage_recorder(
+                    UsageRecord(
+                        simulation_id="",
+                        tick_id=-1,
+                        entity_id=external_id,
+                        model=self._model,
+                        phase="generation",
+                        provider_request_id=response.provider_request_id,
+                        usage=dict(response.usage),
+                    )
+                )
             if parsed is not None:
                 return self._build_profile(participant, external_id, parsed)
         return self._rule_based_profile(participant, external_id)

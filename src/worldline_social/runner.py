@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from worldline_engine import (
@@ -23,7 +24,8 @@ from .dynamics import AffectiveDynamics, RecoveryDynamics
 from .experiment import ExperimentConfig
 from .population import PopulationManifest
 from .prompting import SocialPromptBuilder
-from .providers import DeepSeekProvider
+from .providers import BalanceInfo, DeepSeekProvider
+from .stats import SQLiteUsageStore, UsageRecorder
 from .world import SocialWorld
 
 
@@ -34,9 +36,16 @@ class ExperimentResult:
     population_size: int
     world_state: dict[str, Any]
     database_path: str
+    usage: dict[str, int] = field(default_factory=dict)
+    cost: dict[str, Any] | None = None
 
 
-def build_simulation(config: ExperimentConfig):
+def build_simulation(
+    config: ExperimentConfig,
+    *,
+    provider: DeepSeekProvider | None = None,
+    usage_recorder: UsageRecorder | None = None,
+):
     manifest = PopulationManifest.from_json(config.population_manifest)
     imported = manifest.import_population()
     unknown_scripts = set(config.scripted_actions) - set(imported.external_id_mapping)
@@ -61,7 +70,8 @@ def build_simulation(config: ExperimentConfig):
         dynamics_policy=dynamics,
         feed_limit=config.feed_limit,
     )
-    provider = _create_llm_provider(config.llm) if config.llm is not None else None
+    if provider is None:
+        provider = _create_llm_provider(config.llm) if config.llm is not None else None
     entities = []
     controllers = {}
     for external_id, person_id in sorted(imported.external_id_mapping.items()):
@@ -74,7 +84,9 @@ def build_simulation(config: ExperimentConfig):
             # Scripted actors win; without an llm config everything is replay.
             controllers[controller_ref] = ReplayController({person_id: actions})
         else:
-            controllers[controller_ref] = _llm_controller(config, world, provider, person_id)
+            controllers[controller_ref] = _llm_controller(
+                config, world, provider, person_id, usage_recorder=usage_recorder
+            )
     scheduler = (
         AllEntitiesScheduler()
         if config.activation_probability == 1.0
@@ -112,6 +124,7 @@ def _llm_controller(
     world: SocialWorld,
     provider: DeepSeekProvider,
     person_id: str,
+    usage_recorder: UsageRecorder | None = None,
 ) -> LLMToolController:
     """Assemble an LLM controller whose prompt carries the live persona.
 
@@ -127,26 +140,74 @@ def _llm_controller(
         temperature=config.llm.get("temperature"),
         max_tokens=config.llm.get("max_tokens"),
         thinking=config.llm.get("thinking"),
+        usage_recorder=usage_recorder,
     )
 
 
 async def run_experiment(config: ExperimentConfig, resume: bool = False) -> ExperimentResult:
-    simulation, world, state_store, event_sink = build_simulation(config)
+    """Run one experiment, recording per-request usage and account cost.
+
+    When an LLM is configured, the account balance is sampled before and
+    after the run (``/user/balance``) and the difference is persisted as the
+    run's cost. Balance failures degrade gracefully: the run still proceeds
+    and ``cost`` simply reports ``None`` for the missing sample.
+    """
+    started_at = time.time()
+    provider = _create_llm_provider(config.llm) if config.llm is not None else None
+    balance_before: BalanceInfo | None = None
+    if provider is not None:
+        balance_before = await _fetch_balance(provider)
+    usage_store = SQLiteUsageStore(config.output_database) if provider is not None else None
+    recorder = usage_store.record if usage_store is not None else None
+    simulation, world, state_store, event_sink = build_simulation(
+        config, provider=provider, usage_recorder=recorder
+    )
     try:
         if resume:
             if not simulation.restore_latest_checkpoint():
                 raise ValueError("no checkpoint exists for this simulation_id")
         await simulation.run()
+        finished_at = time.time()
+        balance_after: BalanceInfo | None = None
+        if provider is not None:
+            balance_after = await _fetch_balance(provider)
+        if usage_store is not None:
+            usage_store.record_run_cost(
+                simulation_id=config.simulation_id,
+                balance_before=_balance_total(balance_before),
+                balance_after=_balance_total(balance_after),
+                currency=balance_after.currency if balance_after is not None else "CNY",
+                started_at=started_at,
+                finished_at=finished_at,
+            )
         return ExperimentResult(
             simulation_id=config.simulation_id,
             completed_ticks=simulation.current_tick,
             population_size=len(world.people),
             world_state=world.state,
             database_path=str(config.output_database),
+            usage=usage_store.totals(config.simulation_id) if usage_store else {},
+            cost=usage_store.latest_run_cost(config.simulation_id) if usage_store else None,
         )
     finally:
+        if usage_store is not None:
+            usage_store.close()
         event_sink.close()
         state_store.close()
+
+
+async def _fetch_balance(provider: DeepSeekProvider) -> BalanceInfo | None:
+    """Best-effort balance sample; never raises into the run."""
+    try:
+        return await provider.get_balance()
+    except Exception:
+        return None
+
+
+def _balance_total(balance: BalanceInfo | None) -> str | None:
+    if balance is None or not balance.is_available:
+        return None
+    return balance.total_balance
 
 
 def run_experiment_sync(config: ExperimentConfig, resume: bool = False) -> ExperimentResult:
