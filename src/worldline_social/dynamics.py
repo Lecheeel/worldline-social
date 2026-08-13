@@ -127,11 +127,11 @@ class AffectiveDynamics:
             threat=float(dynamic_state.get("threat", 0.0)),
         )
         return DynamicState(
-            mood=_toward_zero(state.mood, 0.06),
-            anger=_toward_zero(state.anger, 0.04),
-            stress=_toward_zero(state.stress, 0.03),
+            mood=_toward_zero(state.mood, 0.02),
+            anger=_toward_zero(state.anger, 0.015),
+            stress=_toward_zero(state.stress, 0.012),
             fatigue=_toward_zero(state.fatigue, 0.02),
-            threat=_toward_zero(state.threat, 0.04),
+            threat=_toward_zero(state.threat, 0.02),
         ).to_mapping()
 
     def apply_feedback(
@@ -166,23 +166,23 @@ class AffectiveDynamics:
             kind = str(item.get("kind", "")).strip()
             count = max(1, int(item.get("count", 1) or 1))
             if kind == "post_created":
-                mood += 0.05 * count * (0.5 + trait.extraversion)
+                mood += 0.08 * count * (0.5 + trait.extraversion)
             elif kind == "received_like":
-                mood += 0.03 * count * (0.5 + trait.agreeableness * 0.5)
+                mood += 0.05 * count * (0.5 + trait.agreeableness * 0.5)
             elif kind == "received_unlike":
                 neuro_weight = 0.5 + trait.neuroticism
-                mood -= 0.05 * count * neuro_weight * negative_insulation
-                anger += 0.04 * count * neuro_weight * negative_insulation
+                mood -= 0.08 * count * neuro_weight * negative_insulation
+                anger += 0.06 * count * neuro_weight * negative_insulation
             elif kind == "received_comment":
-                stress += 0.02 * count * (0.5 + trait.neuroticism * 0.5)
-                mood += 0.01 * count * trait.extraversion
+                stress += 0.04 * count * (0.5 + trait.neuroticism * 0.5)
+                mood += 0.02 * count * trait.extraversion
             elif kind == "read_negative":
                 neuro_weight = 0.5 + trait.neuroticism
-                stress += 0.04 * neuro_weight * negative_insulation
-                threat += 0.03 * neuro_weight * negative_insulation
-                mood -= 0.02 * negative_insulation
+                stress += 0.07 * neuro_weight * negative_insulation
+                threat += 0.05 * neuro_weight * negative_insulation
+                mood -= 0.04 * negative_insulation
             elif kind == "read_positive":
-                mood += 0.02
+                mood += 0.04
         return DynamicState(
             mood=_clamp(mood, -1.0, 1.0),
             anger=_clamp(anger, 0.0, 1.0),

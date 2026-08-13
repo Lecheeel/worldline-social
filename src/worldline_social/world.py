@@ -198,7 +198,7 @@ class SocialWorld:
                 "handle": person.get("handle"),
                 "display_name": person.get("display_name", ""),
             },
-            "feed": [self._public_post(post, visible) for post in feed],
+            "feed": [self._public_post(post, visible, truncate=True) for post in feed],
         }
 
     def execute_read(
@@ -247,14 +247,14 @@ class SocialWorld:
                 return _rejected(action, "invalid_query")
             needle = query.casefold()
             matches = [
-                {"result_type": "post", **self._public_post(post, visible)}
+                {"result_type": "post", **self._public_post(post, visible, truncate=True)}
                 for post in visible.posts.values()
                 if needle in post["content"].casefold()
             ]
             matches.extend(
                 {
                     "result_type": "comment",
-                    **self._public_comment(comment, visible),
+                    **self._public_comment(comment, visible, truncate=True),
                 }
                 for comment in visible.comments.values()
                 if needle in comment["content"].casefold()
@@ -391,25 +391,35 @@ class SocialWorld:
         return visible
 
     @staticmethod
-    def _public_post(post: Any, state: SocialState) -> dict[str, Any]:
+    def _public_post(
+        post: Any, state: SocialState, truncate: bool = False
+    ) -> dict[str, Any]:
         author = state.people.get(post["author_person_id"], {})
+        content = post["content"]
+        if truncate and len(content) > 200:
+            content = content[:200] + "…"
         return {
             "post_id": post["post_id"],
             "author_handle": author.get("handle", "unknown"),
-            "content": post["content"],
+            "content": content,
             "created_tick": post.get("created_tick", 0),
             "like_count": post.get("like_count", 0),
         }
 
     @staticmethod
-    def _public_comment(comment: Any, state: SocialState) -> dict[str, Any]:
+    def _public_comment(
+        comment: Any, state: SocialState, truncate: bool = False
+    ) -> dict[str, Any]:
         author = state.people.get(comment["author_person_id"], {})
+        content = comment["content"]
+        if truncate and len(content) > 160:
+            content = content[:160] + "…"
         return {
             "comment_id": comment["comment_id"],
             "post_id": comment["post_id"],
             "parent_comment_id": comment.get("parent_comment_id"),
             "author_handle": author.get("handle", "unknown"),
-            "content": comment["content"],
+            "content": content,
             "created_tick": comment.get("created_tick", 0),
             "like_count": comment.get("like_count", 0),
         }

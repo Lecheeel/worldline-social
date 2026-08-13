@@ -42,8 +42,16 @@ _STATE_LABELS: dict[str, str] = {
 }
 
 
-def render_person_system_message(person: Mapping[str, Any]) -> str:
-    """Render a person's identity, persona, traits and live state as a system message."""
+def render_person_system_message(
+    person: Mapping[str, Any], include_dynamic: bool = True
+) -> str:
+    """Render a person's identity, persona, traits and (optionally) live
+    state as a system message.
+
+    ``include_dynamic=False`` yields a fully static message: identical
+    across ticks, so DeepSeek's automatic prefix caching can hit on it
+    (dynamic state then lives in the user message instead).
+    """
     policy = person.get("model_policy", {}) or {}
     lines = [
         f"你是 {person.get('display_name') or person.get('handle')}"
@@ -64,9 +72,13 @@ def render_person_system_message(person: Mapping[str, Any]) -> str:
     if memory:
         lines.append(f"\n## 与事件的关联\n{memory}")
 
-    dynamic = person.get("dynamic_state", {}) or {}
-    state_parts = [f"{label}: {dynamic.get(key, 0.0)}" for key, label in _STATE_LABELS.items()]
-    lines.append("\n## 当前状态\n" + "\n".join(state_parts))
+    if include_dynamic:
+        dynamic = person.get("dynamic_state", {}) or {}
+        state_parts = [
+            f"{label}: {dynamic.get(key, 0.0)}"
+            for key, label in _STATE_LABELS.items()
+        ]
+        lines.append("\n## 当前状态\n" + "\n".join(state_parts))
 
     traits = person.get("private_traits", {}) or {}
     trait_parts = [
@@ -84,11 +96,36 @@ def render_person_system_message(person: Mapping[str, Any]) -> str:
         "- 评论或回复他人的帖子（create_comment / reply_comment）\n"
         "- 点赞你认同的内容（like_post）\n"
         "- 需要更多信息时搜索或查看帖子详情（search_square / view_thread）\n"
+        "观察中已包含广场最新动态（observation.feed），通常无需再执行 view_feed，"
+        "直接决定你的行动即可。\n"
         "不要重复执行刚刚做过的动作；每次行动前参考上一次行动的结果。\n"
         "你的每一次发言、点赞、评论和互动都必须符合以上人设、立场、性格与当前状态。\n"
         "没有想做的事时结束回合。"
     )
     return "\n".join(line for line in lines if line)
+
+
+def _summarize_data(value: Any, depth: int = 0) -> Any:
+    """Shrink previous-result payloads so a full feed is not echoed twice.
+
+    The observation already carries the feed; echoing the same feed again
+    through ``previous_result.data`` doubles prompt size every action.
+    Strings are capped at 160 chars, lists at 3 items (with a count note),
+    and nesting is limited to 3 levels.
+    """
+    if depth > 3:
+        return "…"
+    if isinstance(value, str):
+        return value if len(value) <= 160 else value[:160] + "…"
+    if isinstance(value, list):
+        if len(value) <= 3:
+            return [_summarize_data(item, depth + 1) for item in value]
+        return [_summarize_data(item, depth + 1) for item in value[:3]] + [
+            f"…（另有 {len(value) - 3} 项）"
+        ]
+    if isinstance(value, dict):
+        return {key: _summarize_data(item, depth + 1) for key, item in value.items()}
+    return value
 
 
 def render_observation_message(context: TurnContext) -> str:
@@ -97,7 +134,7 @@ def render_observation_message(context: TurnContext) -> str:
     if context.previous_result is not None:
         previous = {
             "status": context.previous_result.status.value,
-            "data": dict(context.previous_result.data),
+            "data": _summarize_data(dict(context.previous_result.data)),
             "error_code": context.previous_result.error_code,
         }
     payload = {
@@ -106,6 +143,17 @@ def render_observation_message(context: TurnContext) -> str:
         "remaining_actions": context.remaining_actions,
     }
     return json.dumps(payload, ensure_ascii=False, default=str)
+
+
+def render_dynamic_state_section(person: Mapping[str, Any]) -> str:
+    """Render only the live emotional state (goes at the top of the user
+    message so the system message can stay cache-stable)."""
+    dynamic = person.get("dynamic_state", {}) or {}
+    state_parts = [
+        f"{label}: {dynamic.get(key, 0.0)}"
+        for key, label in _STATE_LABELS.items()
+    ]
+    return "## 当前状态\n" + "\n".join(state_parts)
 
 
 class SocialPromptBuilder:
@@ -117,8 +165,15 @@ class SocialPromptBuilder:
     def __call__(self, context: TurnContext) -> Sequence[ModelMessage]:
         person = self._person(context.entity_id)
         return (
-            ModelMessage("system", render_person_system_message(person)),
-            ModelMessage("user", render_observation_message(context)),
+            ModelMessage(
+                "system", render_person_system_message(person, include_dynamic=False)
+            ),
+            ModelMessage(
+                "user",
+                render_dynamic_state_section(person)
+                + "\n\n"
+                + render_observation_message(context),
+            ),
         )
 
     def _person(self, entity_id: str) -> Mapping[str, Any]:
