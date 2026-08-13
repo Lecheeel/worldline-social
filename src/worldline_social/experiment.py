@@ -19,7 +19,7 @@ class ExperimentConfig:
     seed: int = 0
     max_ticks: int = 1
     activation_probability: float = 1.0
-    max_concurrent_turns: int = 1
+    max_concurrent_turns: int = 8
     max_actions_per_turn: int = 8
     max_controller_calls_per_turn: int = 8
     max_cost_per_turn: int | None = None
