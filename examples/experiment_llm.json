@@ -16,6 +16,7 @@
     "model": "deepseek-chat",
     "temperature": 0.2,
     "max_tokens": 512,
+    "thinking": "disabled",
     "api_key_env": "DEEPSEEK_API_KEY"
   }
 }

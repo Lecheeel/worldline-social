@@ -67,6 +67,10 @@ class DeepSeekProvider(ModelProvider):
             payload["temperature"] = request.temperature
         if request.max_tokens is not None:
             payload["max_tokens"] = request.max_tokens
+        if request.thinking is not None:
+            if request.thinking not in {"enabled", "disabled"}:
+                raise ProviderError(f"invalid thinking mode: {request.thinking}")
+            payload["thinking"] = {"type": request.thinking}
 
         request_bytes = json.dumps(payload).encode("utf-8")
         http_request = Request(

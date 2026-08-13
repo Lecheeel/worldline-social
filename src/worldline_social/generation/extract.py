@@ -99,6 +99,7 @@ class EventExtractor:
         model: str,
         temperature: float | None = 0.2,
         max_attempts: int = 3,
+        thinking: str | None = None,
     ) -> None:
         if max_attempts < 1:
             raise ValueError("max_attempts must be positive")
@@ -106,6 +107,7 @@ class EventExtractor:
         self._model = model
         self._temperature = temperature
         self._max_attempts = max_attempts
+        self._thinking = thinking
 
     async def extract(self, text: str) -> ExtractionResult:
         if not text.strip():
@@ -127,6 +129,7 @@ class EventExtractor:
                     ),
                     temperature=self._temperature,
                     max_tokens=2048,
+                    thinking=self._thinking,
                 )
             )
             parsed = extract_json_object(response.content)

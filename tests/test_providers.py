@@ -90,6 +90,16 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual("claim", decision.action_type)
         self.assertEqual((), provider.requests[0].messages)
 
+    def test_llm_controller_forwards_thinking_mode(self) -> None:
+        provider = FakeProvider(
+            CompletionResponse(None, (ModelToolCall("call", "claim", {}),))
+        )
+        controller = LLMToolController(provider, "fake-model", thinking="disabled")
+
+        asyncio.run(controller.next_action(context()))
+
+        self.assertEqual("disabled", provider.requests[0].thinking)
+
     def test_builtin_registry_creates_deepseek_provider_without_exposing_key(self) -> None:
         registry = builtin_provider_registry()
         provider = registry.create("deepseek", {"api_key": "test-key"})

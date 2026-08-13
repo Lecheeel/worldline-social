@@ -28,6 +28,7 @@ class CompletionRequest:
     tools: Sequence[ActionSpec] = field(default_factory=tuple)
     temperature: float | None = None
     max_tokens: int | None = None
+    thinking: str | None = None
 
 
 @dataclass(frozen=True)

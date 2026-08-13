@@ -19,7 +19,7 @@ PromptBuilder = Callable[[TurnContext], Sequence[ModelMessage] | Awaitable[Seque
 class LLMToolController(Controller):
     """Translate normalized provider tool calls into engine intents."""
 
-    def __init__(self, provider: ModelProvider, model: str, prompt_builder: PromptBuilder | None = None, temperature: float | None = 0.0, max_tokens: int | None = 512) -> None:
+    def __init__(self, provider: ModelProvider, model: str, prompt_builder: PromptBuilder | None = None, temperature: float | None = 0.0, max_tokens: int | None = 512, thinking: str | None = None) -> None:
         if not model:
             raise ValueError("model must not be empty")
         self._provider = provider
@@ -27,6 +27,7 @@ class LLMToolController(Controller):
         self._prompt_builder = prompt_builder or self._default_prompt
         self._temperature = temperature
         self._max_tokens = max_tokens
+        self._thinking = thinking
         self._request_count = 0
         self._usage: dict[str, int] = defaultdict(int)
 
@@ -37,7 +38,7 @@ class LLMToolController(Controller):
         response = await self._provider.complete(CompletionRequest(
             model=self._model, messages=tuple(messages),
             tools=tuple(context.available_actions), temperature=self._temperature,
-            max_tokens=self._max_tokens,
+            max_tokens=self._max_tokens, thinking=self._thinking,
         ))
         self._request_count += 1
         for metric, value in response.usage.items():

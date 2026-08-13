@@ -32,6 +32,8 @@ def main() -> None:
     generate.add_argument("--model", default="deepseek-chat", help="LLM model name")
     generate.add_argument("--source", default="event-generated", help="Manifest source label")
     generate.add_argument("--max-participants", type=int, default=30)
+    generate.add_argument("--thinking", choices=("enabled", "disabled"), default="disabled",
+                          help="LLM thinking mode (default: disabled)")
     args = parser.parse_args()
 
     if args.command == "validate-population":
@@ -49,6 +51,7 @@ def main() -> None:
             args.model,
             source=args.source,
             max_participants=args.max_participants,
+            thinking=args.thinking,
         )
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)

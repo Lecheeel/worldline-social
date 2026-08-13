@@ -126,6 +126,7 @@ def _llm_controller(
         prompt_builder=SocialPromptBuilder(world),
         temperature=config.llm.get("temperature"),
         max_tokens=config.llm.get("max_tokens"),
+        thinking=config.llm.get("thinking"),
     )
 
 

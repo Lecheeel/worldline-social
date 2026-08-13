@@ -41,6 +41,7 @@ async def generate_population_from_text(
     extraction_temperature: float | None = 0.2,
     profile_temperature: float | None = 0.4,
     max_attempts: int = 3,
+    thinking: str | None = None,
 ) -> GenerationResult:
     """Extract actors, build profiles and return a validated manifest.
 
@@ -54,11 +55,11 @@ async def generate_population_from_text(
     if max_participants < 1:
         raise ValueError("max_participants must be positive")
 
-    extractor = EventExtractor(provider, model, extraction_temperature, max_attempts)
+    extractor = EventExtractor(provider, model, extraction_temperature, max_attempts, thinking)
     extraction = await extractor.extract(text)
     participants = tuple(extraction.participants[:max_participants])
 
-    profile_generator = ProfileGenerator(provider, model, profile_temperature, max_attempts)
+    profile_generator = ProfileGenerator(provider, model, profile_temperature, max_attempts, thinking)
     people: list[PersonProfile] = []
     name_to_external: dict[str, str] = {}
     for index, participant in enumerate(participants):
@@ -129,8 +130,13 @@ def generate_population_from_text_sync(
 
 
 def _external_id(name: str, index: int) -> str:
-    slug = _SLUG_RE.sub("_", name.lower()).strip("_")[:24]
-    return f"{slug or 'actor'}-{index:02d}"
+    """Human-readable external id: original name (whitespace -> underscore).
+
+    Only ``handle`` must match ^[a-z0-9_]+$; external ids may carry the
+    source-language name, with an index suffix to guarantee uniqueness.
+    """
+    base = re.sub(r"\s+", "_", name.strip()) or "actor"
+    return f"{base}-{index:02d}"
 
 
 def result_to_json(result: GenerationResult) -> dict[str, Any]:

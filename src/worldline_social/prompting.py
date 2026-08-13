@@ -79,8 +79,14 @@ def render_person_system_message(person: Mapping[str, Any]) -> str:
 
     lines.append(
         "\n## 行为要求\n"
-        "你的每一次发言、点赞、评论和互动都必须符合以上人设、立场、性格与当前状态。"
-        "通过工具调用执行动作；没有想做的事时结束回合。"
+        "你是一个活跃的社交媒体用户，请通过以下方式参与舆论：\n"
+        "- 发帖表达你的立场与观点（create_post）\n"
+        "- 评论或回复他人的帖子（create_comment / reply_comment）\n"
+        "- 点赞你认同的内容（like_post）\n"
+        "- 需要更多信息时搜索或查看帖子详情（search_square / view_thread）\n"
+        "不要重复执行刚刚做过的动作；每次行动前参考上一次行动的结果。\n"
+        "你的每一次发言、点赞、评论和互动都必须符合以上人设、立场、性格与当前状态。\n"
+        "没有想做的事时结束回合。"
     )
     return "\n".join(line for line in lines if line)
 
