@@ -30,13 +30,13 @@ class SocialWorld:
         ActionSpec(
             "view_thread",
             ActionKind.READ,
-            "Read a post and its comments.",
+            "Read a post and its full comment thread (all comments carry comment_id).",
             {"required": ("post_id",)},
         ),
         ActionSpec(
             "search_square",
             ActionKind.READ,
-            "Search public posts and comments.",
+            "Search public posts and comments by keyword.",
             {"required": ("query",)},
             cost=2,
         ),
@@ -49,13 +49,13 @@ class SocialWorld:
         ActionSpec(
             "create_comment",
             ActionKind.WRITE,
-            "Comment on a post.",
+            "Comment on a post (post_id from the feed).",
             {"required": ("post_id", "content")},
         ),
         ActionSpec(
             "reply_comment",
             ActionKind.WRITE,
-            "Reply to a comment.",
+            "Reply to a comment. comment_id must be a comment_id from the feed or view_thread results - never a post_id.",
             {"required": ("comment_id", "content")},
         ),
         ActionSpec(
@@ -73,7 +73,7 @@ class SocialWorld:
         ActionSpec(
             "like_comment",
             ActionKind.WRITE,
-            "Like a comment.",
+            "Like a comment. comment_id must come from the feed or view_thread results.",
             {"required": ("comment_id",)},
         ),
         ActionSpec(
@@ -198,8 +198,28 @@ class SocialWorld:
                 "handle": person.get("handle"),
                 "display_name": person.get("display_name", ""),
             },
-            "feed": [self._public_post(post, visible, truncate=True) for post in feed],
+            "feed": [self._feed_post(post, visible) for post in feed],
         }
+
+    def _feed_post(
+        self, post: Any, state: SocialState, preview_comments: int = 2
+    ) -> dict[str, Any]:
+        """Public feed item: full post text plus the newest few comments
+        (with their comment_id) so agents can join discussions directly."""
+        item = self._public_post(post, state, truncate=True)
+        comments = sorted(
+            (
+                comment
+                for comment in state.comments.values()
+                if comment["post_id"] == post["post_id"]
+            ),
+            key=lambda comment: comment["comment_id"],
+        )
+        item["comment_count"] = len(comments)
+        item["comments"] = [
+            self._public_comment(comment, state) for comment in comments[-preview_comments:]
+        ]
+        return item
 
     def execute_read(
         self,
@@ -396,8 +416,8 @@ class SocialWorld:
     ) -> dict[str, Any]:
         author = state.people.get(post["author_person_id"], {})
         content = post["content"]
-        if truncate and len(content) > 200:
-            content = content[:200] + "…"
+        if truncate and len(content) > 400:
+            content = content[:400] + "…"
         return {
             "post_id": post["post_id"],
             "author_handle": author.get("handle", "unknown"),
@@ -412,8 +432,8 @@ class SocialWorld:
     ) -> dict[str, Any]:
         author = state.people.get(comment["author_person_id"], {})
         content = comment["content"]
-        if truncate and len(content) > 160:
-            content = content[:160] + "…"
+        if truncate and len(content) > 250:
+            content = content[:250] + "…"
         return {
             "comment_id": comment["comment_id"],
             "post_id": comment["post_id"],
