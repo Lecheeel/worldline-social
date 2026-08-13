@@ -127,9 +127,9 @@ class AffectiveDynamics:
             threat=float(dynamic_state.get("threat", 0.0)),
         )
         return DynamicState(
-            mood=_toward_zero(state.mood, 0.02),
-            anger=_toward_zero(state.anger, 0.015),
-            stress=_toward_zero(state.stress, 0.012),
+            mood=_toward_zero(state.mood, 0.04),
+            anger=_toward_zero(state.anger, 0.03),
+            stress=_toward_zero(state.stress, 0.02),
             fatigue=_toward_zero(state.fatigue, 0.02),
             threat=_toward_zero(state.threat, 0.02),
         ).to_mapping()
@@ -166,9 +166,9 @@ class AffectiveDynamics:
             kind = str(item.get("kind", "")).strip()
             count = max(1, int(item.get("count", 1) or 1))
             if kind == "post_created":
-                mood += 0.08 * count * (0.5 + trait.extraversion)
+                mood += 0.05 * count * (0.5 + trait.extraversion)
             elif kind == "received_like":
-                mood += 0.05 * count * (0.5 + trait.agreeableness * 0.5)
+                mood += 0.03 * count * (0.5 + trait.agreeableness * 0.5)
             elif kind == "received_unlike":
                 neuro_weight = 0.5 + trait.neuroticism
                 mood -= 0.08 * count * neuro_weight * negative_insulation
@@ -181,8 +181,9 @@ class AffectiveDynamics:
                 stress += 0.07 * neuro_weight * negative_insulation
                 threat += 0.05 * neuro_weight * negative_insulation
                 mood -= 0.04 * negative_insulation
+                anger += 0.05 * neuro_weight * negative_insulation
             elif kind == "read_positive":
-                mood += 0.04
+                mood += 0.03
         return DynamicState(
             mood=_clamp(mood, -1.0, 1.0),
             anger=_clamp(anger, 0.0, 1.0),
