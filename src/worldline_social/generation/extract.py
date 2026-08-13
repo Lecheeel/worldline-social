@@ -128,7 +128,7 @@ class EventExtractor:
                         ),
                     ),
                     temperature=self._temperature,
-                    max_tokens=2048,
+                    max_tokens=4096,
                     thinking=self._thinking,
                 )
             )
