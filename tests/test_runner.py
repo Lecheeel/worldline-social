@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
+from dataclasses import replace
+from importlib import metadata
 from pathlib import Path
 from unittest import mock
 
@@ -11,10 +15,17 @@ from worldline_engine import ReplayController
 
 from worldline_social.controllers import LLMToolController
 from worldline_social.experiment import ExperimentConfig
-from worldline_social.runner import build_simulation
+from worldline_social.population import PopulationManifest
+from worldline_social.runner import build_simulation, build_worldline_manifest
 
 
-def write_config(tmp: Path, *, llm: dict | None = None, scripted: dict | None = None) -> Path:
+def write_config(
+    tmp: Path,
+    *,
+    llm: dict | None = None,
+    scripted: dict | None = None,
+    output_database: str = "../runs/runner-test.sqlite",
+) -> Path:
     population = {
         "manifest_version": "1",
         "source": "runner-test",
@@ -44,7 +55,7 @@ def write_config(tmp: Path, *, llm: dict | None = None, scripted: dict | None = 
         "config_version": "1",
         "simulation_id": "runner-test",
         "population_manifest": "population.json",
-        "output_database": "../runs/runner-test.sqlite",
+        "output_database": output_database,
         "seed": 1,
         "max_ticks": 1,
     }
@@ -127,6 +138,76 @@ class RunnerAssemblyTests(unittest.TestCase):
             path = write_config(Path(tmp), llm={"provider": "deepseek"})
             with self.assertRaisesRegex(ValueError, "model"):
                 ExperimentConfig.from_json(path)
+
+
+class WorldlineManifestTests(unittest.TestCase):
+    def test_manifest_pins_identity_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = ExperimentConfig.from_json(
+                write_config(
+                    Path(tmp),
+                    llm={"provider": "deepseek", "model": "deepseek-chat", "temperature": 0.4},
+                )
+            )
+            population = PopulationManifest.from_json(config.population_manifest)
+            manifest = build_worldline_manifest(config, population)
+
+        self.assertEqual("1", manifest["worldline_manifest_version"])
+        self.assertEqual(metadata.version("worldline-engine"), manifest["engine"])
+        self.assertEqual(metadata.version("worldline-social"), manifest["social"])
+        self.assertEqual(2, manifest["population"]["size"])
+        self.assertEqual(64, len(manifest["population"]["sha256"]))
+        self.assertEqual("deepseek", manifest["llm"]["provider"])
+        self.assertEqual(0.4, manifest["llm"]["temperature"])
+        self.assertIsNone(manifest["scripted_actions_sha256"])
+        self.assertEqual(1, manifest["experiment"]["seed"])
+
+    def test_seed_change_only_touches_experiment_section(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = ExperimentConfig.from_json(write_config(Path(tmp)))
+            population = PopulationManifest.from_json(config.population_manifest)
+            base = build_worldline_manifest(config, population)
+            other = build_worldline_manifest(replace(config, seed=2), population)
+
+        self.assertEqual(base["population"], other["population"])
+        self.assertEqual(base["llm"], other["llm"])
+        self.assertEqual(base["prompt_builder_sha256"], other["prompt_builder_sha256"])
+        self.assertEqual(1, base["experiment"]["seed"])
+        self.assertEqual(2, other["experiment"]["seed"])
+
+    def test_scripted_actions_are_fingerprinted(self) -> None:
+        scripted = {"bob": [{"action_type": "do_nothing", "parameters": {}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            config = ExperimentConfig.from_json(write_config(Path(tmp), scripted=scripted))
+            population = PopulationManifest.from_json(config.population_manifest)
+            manifest = build_worldline_manifest(config, population)
+
+        self.assertEqual(64, len(manifest["scripted_actions_sha256"]))
+
+    def test_run_emits_worldline_manifest_as_first_event(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = ExperimentConfig.from_json(
+                write_config(Path(tmp), output_database="run.sqlite")
+            )
+            simulation, world, store, sink = build_simulation(config)
+            try:
+                asyncio.run(simulation.run())
+            finally:
+                sink.close()
+                store.close()
+
+            connection = sqlite3.connect(config.output_database)
+            rows = connection.execute(
+                "SELECT event_type, payload_json FROM simulation_events"
+                " ORDER BY sequence LIMIT 2"
+            ).fetchall()
+            connection.close()
+
+        self.assertEqual("worldline_manifest", rows[0][0])
+        payload = json.loads(rows[0][1])
+        self.assertEqual("1", payload["manifest"]["worldline_manifest_version"])
+        self.assertEqual(64, len(payload["manifest"]["population"]["sha256"]))
+        self.assertEqual("simulation_started", rows[1][0])
 
 
 if __name__ == "__main__":

@@ -4,12 +4,16 @@
 
 ## 项目哲学：世界线，而非单一世界
 
-与 `worldline-engine` 保持一致：每个实验是一次世界线探索，`seed` 定义一条世界线。
+与 `worldline-engine` 保持一致：
 
-- 世界的价值不在“唯一正确的未来”，而在可能性的空间：同一事件存在许多合理走向，微小扰动（LLM 抽样、随机激活、参数微变）经系统放大产生宏观差异——蝴蝶效应。
-- 比较的语义是：同一起点，看看世界能走向哪些不同的地方。在同一条世界线上做干预实验（只改一个变量），在跨世界线上观察发散。
-- 社会模拟的确定性保证单条世界线内部的自洽与可审计（同 seed、同输入、同 LLM 响应流 → 逐字节可重放）；LLM 是社会世界的主要分叉点，其响应应被记录、可审计。
-- 一句话：Run one worldline. Compare many. Explore the space of possible worlds.
+- 一条世界线是一个二元组（manifest，录制流）：manifest 钉住定义运行的所有要素（engine/social 版本、人口哈希、模型、Prompt、策略），`seed` 只是随机流参数。同 seed 而 manifest 不同，就是两条不同的世界线；两条世界线只有在 manifest 只差一个字段时才是可比较的。
+- 每次实验是一次世界线探索。`runner.build_simulation` 自动组装 worldline manifest，并由引擎作为 `worldline_manifest` 事件记录在事件流最前；人口哈希在运行时对 `PopulationManifest.to_mapping()` 的 canonical JSON 计算，不写入人口文件本身。
+- 世界的价值不在"唯一正确的未来"，而在可能性的空间：同一事件存在许多合理走向，微小扰动（LLM 抽样、随机激活、参数微变）经系统放大产生宏观差异——蝴蝶效应。但发散是测量结果，不是结论：研究对象是分布的形状——什么结局在 seed 之间稳定、发散从哪里开始、哪些结局相互吸引。
+- 比较的语义是：同一起点，看看世界能走向哪些不同的地方——更重要的是，看看什么不变。
+- 方法论纪律：干预实验只允许改动 manifest 中的一个字段，其余全部固定；换 seed 重跑得到的是抽样噪声，不是干预效应。任何干预结论都需要零干预基线对照（同 manifest、不同 seed）。
+- 社会模拟的确定性保证单条世界线内部的自洽与可审计（同 manifest、同输入、同 LLM 响应流 → 逐字节可重放）；LLM 是社会世界的主要分叉点，其响应应被记录、可审计。
+- 认识论定位：本项目模拟的是"LLM 的民间社会学"，不是真实社会；输出是假设与排练，不是预测，结论永远相对于模型成立。该定位在 README 的"Epistemic status"一节公开声明。
+- 一句话：Run one worldline. Compare many. Find what doesn't change.
 
 ## 项目边界
 

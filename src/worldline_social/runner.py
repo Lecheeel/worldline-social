@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 import time
 from dataclasses import dataclass, field
+from importlib import metadata
+from pathlib import Path
 from typing import Any, Mapping
 
 from worldline_engine import (
@@ -18,6 +22,7 @@ from worldline_engine import (
     Simulation,
 )
 
+from . import prompting
 from .controllers import LLMToolController
 from .distribution import AllPostsDistribution, RecentPostsDistribution
 from .dynamics import AffectiveDynamics, RecoveryDynamics
@@ -38,6 +43,80 @@ class ExperimentResult:
     database_path: str
     usage: dict[str, int] = field(default_factory=dict)
     cost: dict[str, Any] | None = None
+
+
+def _canonical_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), default=str
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def build_worldline_manifest(
+    config: ExperimentConfig, population: PopulationManifest
+) -> dict[str, Any]:
+    """Assemble the content-addressed identity of this worldline.
+
+    A worldline is the pair (manifest, recorded stream); the seed is only
+    the random-stream parameter. Everything that can change the run is
+    pinned here, so two worldlines are comparable exactly when their
+    manifests differ in a single field.
+    """
+    llm = None
+    if config.llm is not None:
+        llm = {
+            "provider": config.llm.get("provider"),
+            "model": config.llm.get("model"),
+            "temperature": config.llm.get("temperature"),
+            "max_tokens": config.llm.get("max_tokens"),
+            "thinking": config.llm.get("thinking"),
+        }
+    scripted_actions_sha256 = None
+    if config.scripted_actions:
+        scripted_actions_sha256 = _canonical_sha256(
+            {
+                external_id: [
+                    {
+                        "action_type": action.action_type,
+                        "parameters": dict(action.parameters),
+                        "target_ref": action.target_ref,
+                        "client_ref": action.client_ref,
+                    }
+                    for action in actions
+                ]
+                for external_id, actions in sorted(config.scripted_actions.items())
+            }
+        )
+    return {
+        "worldline_manifest_version": "1",
+        "engine": metadata.version("worldline-engine"),
+        "social": metadata.version("worldline-social"),
+        "population": {
+            "sha256": _canonical_sha256(population.to_mapping()),
+            "manifest_version": population.manifest_version,
+            "source": population.source,
+            "size": len(population.people),
+        },
+        "llm": llm,
+        "prompt_builder_sha256": hashlib.sha256(
+            Path(prompting.__file__).read_bytes()
+        ).hexdigest(),
+        "scripted_actions_sha256": scripted_actions_sha256,
+        "experiment": {
+            "config_version": config.config_version,
+            "seed": config.seed,
+            "max_ticks": config.max_ticks,
+            "activation_probability": config.activation_probability,
+            "distribution_policy": config.distribution_policy,
+            "dynamics_policy": config.dynamics_policy,
+            "feed_limit": config.feed_limit,
+            "max_actions_per_turn": config.max_actions_per_turn,
+            "max_controller_calls_per_turn": config.max_controller_calls_per_turn,
+            "max_cost_per_turn": config.max_cost_per_turn,
+            "turn_timeout_seconds": config.turn_timeout_seconds,
+            "checkpoint_every_ticks": config.checkpoint_every_ticks,
+        },
+    }
 
 
 def build_simulation(
@@ -102,6 +181,7 @@ def build_simulation(
         world=world,
         state_store=state_store,
         event_sink=event_sink,
+        manifest=build_worldline_manifest(config, manifest),
     )
     return simulation, world, state_store, event_sink
 
